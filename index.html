@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Financial Dashboard</title>
+    <title>Enterprise Financial Dashboard - FinPulse</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,13 +18,13 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     
-    <!-- Prop Types (Required for Recharts UMD build) -->
+    <!-- Prop Types -->
     <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
 
-    <!-- Babel (For compiling JSX in the browser) -->
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Recharts (Pinned to stable UMD version to avoid ForwardRef errors) -->
+    <!-- Recharts -->
     <script src="https://unpkg.com/recharts@2.1.9/umd/Recharts.js"></script>
     
     <!-- SheetJS (Excel Export/Import) -->
@@ -44,6 +44,16 @@
             .sticky { position: static !important; }
             .border, .shadow-sm { box-shadow: none !important; border: none !important; border-bottom: 1px solid #f1f5f9 !important; }
         }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+        
+        /* Chart Containers Styling */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+        }
     </style>
 </head>
 <body class="bg-[#f8fafc] text-slate-900">
@@ -54,7 +64,7 @@
         const { useState, useMemo, useEffect } = React;
         const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } = window.Recharts;
 
-        // --- Icon Wrapper (Using FontAwesome for Standalone HTML) ---
+        // --- Icon Wrapper ---
         const Icon = ({ name, size = 16, className = "" }) => {
             const faMap = {
                 Upload: 'fa-solid fa-upload',
@@ -74,7 +84,9 @@
                 Wallet: 'fa-solid fa-wallet',
                 ArrowUpRight: 'fa-solid fa-arrow-up',
                 ArrowDownRight: 'fa-solid fa-arrow-down',
-                Layers: 'fa-solid fa-layer-group'
+                Layers: 'fa-solid fa-layer-group',
+                LineMsg: 'fa-brands fa-line', 
+                PaperPlane: 'fa-solid fa-paper-plane'
             };
             return <i className={`${faMap[name] || 'fa-solid fa-star'} ${className}`} style={{ fontSize: size }}></i>;
         };
@@ -94,7 +106,7 @@
             if (val === undefined || val === null || isNaN(val)) return '-';
             if (val >= 1000000) return `฿ ${(val / 1000000).toFixed(2)}M`;
             if (val >= 1000) return `฿ ${(val / 1000).toFixed(0)}k`;
-            return `฿ ${val.toLocaleString()}`;
+            return `฿ ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         };
 
         // --- Accounting Engine ---
@@ -297,39 +309,23 @@
             const [isImporting, setIsImporting] = useState(false);
             const [rawCsvData, setRawCsvData] = useState(null);
             const [fileName, setFileName] = useState("");
+            
+            // Line Message State
+            const [isSendingLine, setIsSendingLine] = useState(false);
+            const [showNotification, setShowNotification] = useState(false);
+            const [notificationMsg, setNotificationMsg] = useState("");
+            const [notificationError, setNotificationError] = useState(false);
 
             const { financialData, reportData } = useFinancialEngine(rawCsvData);
             const importSuccess = rawCsvData !== null;
 
-            const handleFileUpload = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                setFileName(file.name);
-                setIsImporting(true);
+            // ==========================================
+            // ใส่ Google Apps Script Web App URL ที่นี่
+            // ==========================================
+            const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxOMEBCbPhH65k7ihnYjiBdUPBT8_-O7V2CV_coWX9Av5voBhGRCjl8cSeCGmPZ0KskPQ/exec"; 
 
-                const reader = new FileReader();
-                reader.onload = (evt) => {
-                    try {
-                        const bstr = evt.target.result;
-                        const wb = XLSX.read(bstr, { type: 'binary' });
-                        const wsname = wb.SheetNames[0];
-                        const data = XLSX.utils.sheet_to_json(wb.Sheets[wsname], { header: 1 });
-                        setRawCsvData(data);
-                        setTimeout(() => {
-                            setIsImporting(false);
-                            setActiveTab('statements');
-                        }, 500);
-                    } catch (err) {
-                        console.error(err);
-                        setIsImporting(false);
-                        alert("Failed to read the file.");
-                    }
-                };
-                reader.readAsBinaryString(file);
-            };
-
-            const handleExportExcel = () => {
-                if (typeof XLSX === 'undefined') return alert("Loading export engine...");
+            // --- ฟังก์ชันแยกสำหรับสร้างโครงสร้าง Excel ---
+            const getExcelWorkbook = () => {
                 const wb = XLSX.utils.book_new();
 
                 const styles = {
@@ -394,6 +390,94 @@
                     { title: "Verification", items: [], totalRow: true, totalLabel: "TOTAL LIAB & EQUITY", totalValues: reportData.totalLiabEquity, grandTotal: reportData.totalLiabEquity[11] }
                 ], 'bs');
 
+                return wb;
+            };
+
+            const handleSendToLine = async () => {
+                if (!importSuccess) return;
+                
+                setIsSendingLine(true);
+                setNotificationError(false);
+                
+                const message = `
+📊 สรุปงบการเงิน (FinPulse)
+🏢 บริษัท: Amper Co., Ltd.
+📅 ปีบัญชี: FY 2025
+-----------------------
+💰 รายได้รวม: ${formatCompact(reportData.yearlyRev)}
+📉 ค่าใช้จ่ายรวม: ${formatCompact(reportData.totalCombinedExp.reduce((a,b)=>a+b,0))}
+💵 กำไร(ขาดทุน)สุทธิ: ${formatCompact(reportData.yearlyNet)}
+📈 อัตรากำไรสุทธิ: ${reportData.netMargin.toFixed(2)}%
+-----------------------
+🏦 สินทรัพย์รวม: ${formatCompact(reportData.totalAssets[11] || 0)}
+ liabilities หนี้สินรวม: ${formatCompact(reportData.totalLiabilities[11] || 0)}
+💼 ส่วนของผู้ถือหุ้น: ${formatCompact(reportData.totalEquityReal[11] || 0)}
+                `;
+
+                try {
+                    const wb = getExcelWorkbook();
+                    const fileBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+                    
+                    const payloadString = JSON.stringify({ 
+                        message: message,
+                        fileName: `Financial_Report_DeepBlue_${new Date().getFullYear()}.xlsx`,
+                        fileBase64: fileBase64
+                    });
+
+                    // ใช้ mode: 'no-cors' เพื่อหลีกเลี่ยงการถูกบล็อกจากเบราว์เซอร์
+                    await fetch(WEB_APP_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'text/plain',
+                        },
+                        body: payloadString
+                    });
+                    
+                    setNotificationError(false);
+                    setNotificationMsg("ส่งคำสั่งเข้า LINE เรียบร้อยแล้ว! ตรวจสอบแชทบอทของคุณได้เลยครับ");
+                    
+                } catch (error) {
+                    console.error("Fetch Error:", error);
+                    setNotificationError(true);
+                    setNotificationMsg(`ส่งไม่สำเร็จ: ${error.message}`);
+                } finally {
+                    setIsSendingLine(false);
+                    setShowNotification(true);
+                    setTimeout(() => setShowNotification(false), 5000); 
+                }
+            };
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setFileName(file.name);
+                setIsImporting(true);
+
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const bstr = evt.target.result;
+                        const wb = XLSX.read(bstr, { type: 'binary' });
+                        const wsname = wb.SheetNames[0];
+                        const data = XLSX.utils.sheet_to_json(wb.Sheets[wsname], { header: 1 });
+                        setRawCsvData(data);
+                        setTimeout(() => {
+                            setIsImporting(false);
+                            setActiveTab('dashboard');
+                        }, 500);
+                    } catch (err) {
+                        console.error(err);
+                        setIsImporting(false);
+                        alert("Failed to read the file.");
+                    }
+                };
+                reader.readAsBinaryString(file);
+            };
+
+            const handleExportExcel = () => {
+                if (typeof XLSX === 'undefined') return alert("Loading export engine...");
+                const wb = getExcelWorkbook();
                 XLSX.writeFile(wb, `Financial_Report_DeepBlue_${new Date().getFullYear()}.xlsx`);
             };
 
@@ -415,6 +499,14 @@
 
             return (
                 <div className="flex">
+                    {/* Notification Toast */}
+                    {showNotification && (
+                        <div className={`fixed top-24 right-10 z-50 text-white px-6 py-4 rounded-xl shadow-xl flex items-start gap-3 modal-fade-in font-bold max-w-sm ${notificationError ? 'bg-rose-600' : 'bg-[#00B900]'}`}>
+                            <Icon name={notificationError ? "TrendingDown" : "CheckCircle2"} size={18} className="mt-0.5 shrink-0" />
+                            <span className="text-sm leading-relaxed">{notificationMsg}</span>
+                        </div>
+                    )}
+
                     <aside className="w-64 bg-blue-950 flex flex-col z-50 fixed h-full no-print shadow-2xl border-r border-blue-900">
                         <div className="h-20 flex items-center px-8 border-b border-blue-900/50 bg-blue-950">
                             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white mr-3 shadow-lg shadow-blue-900/50">
@@ -427,8 +519,8 @@
                             <p className="px-4 text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2">Finance Engine</p>
                             {[
                                 { id: 'import', iconName: 'Upload', label: 'Data Import' },
-                                { id: 'statements', iconName: 'FileText', label: 'Ledger Statements' },
                                 { id: 'dashboard', iconName: 'BarChart3', label: 'Performance Analytics' },
+                                { id: 'statements', iconName: 'FileText', label: 'Ledger Statements' },
                             ].map(item => (
                                 <button
                                     key={item.id}
@@ -436,10 +528,10 @@
                                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-semibold ${
                                         activeTab === item.id 
                                             ? 'bg-blue-800 text-white shadow-md shadow-blue-900/20' 
-                                            : 'text-blue-300 hover:bg-blue-900/50 hover:text-white'
+                                            : 'text-slate-400 hover:bg-blue-900/50 hover:text-white'
                                     }`}
                                 >
-                                    <Icon name={item.iconName} size={16} className={activeTab === item.id ? 'text-blue-400' : 'text-blue-400/70'} />
+                                    <Icon name={item.iconName} size={16} className={activeTab === item.id ? 'text-blue-400' : 'text-slate-400/70'} />
                                     <span>{item.label}</span>
                                 </button>
                             ))}
@@ -452,7 +544,7 @@
                                 </div>
                                 <div>
                                     <p className="text-sm font-bold text-white">Amper Co., Ltd.</p>
-                                    <p className="text-xs text-blue-400">Active Workspace</p>
+                                    <p className="text-xs text-slate-400">Active Workspace</p>
                                 </div>
                             </div>
                         </div>
@@ -475,9 +567,21 @@
                                         <Icon name="CheckCircle2" size={14} /> Data Synced
                                     </span>
                                 )}
-                                <button onClick={() => window.print()} className="p-2 text-slate-500 hover:text-blue-700 hover:bg-blue-50 transition-colors bg-white border border-slate-200 rounded-lg shadow-sm">
+                                
+                                <button onClick={() => window.print()} className="p-2 text-slate-500 hover:text-blue-700 hover:bg-blue-50 transition-colors bg-white border border-slate-200 rounded-lg shadow-sm" title="Print Report">
                                     <Icon name="Printer" size={16} />
                                 </button>
+
+                                {/* LINE Button */}
+                                <button 
+                                    onClick={handleSendToLine} 
+                                    disabled={!importSuccess || isSendingLine}
+                                    className="flex items-center gap-2 bg-[#00B900] hover:bg-[#009900] text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-[#00B900]/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isSendingLine ? <Icon name="Loader2" size={16} className="fa-spin" /> : <Icon name="LineMsg" size={16} />}
+                                    {isSendingLine ? 'กำลังส่ง...' : 'Send to Line'}
+                                </button>
+
                                 <button 
                                     onClick={handleExportExcel} 
                                     disabled={!importSuccess}
@@ -524,7 +628,7 @@
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                         <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-blue-100 shadow-sm">
                                             <p className="text-base font-bold text-blue-950 mb-6">Income vs Expense Trend</p>
-                                            <div className="h-80">
+                                            <div className="chart-container h-80 max-h-[400px]">
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <ComposedChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -541,7 +645,7 @@
 
                                         <div className="bg-white p-8 rounded-2xl border border-blue-100 shadow-sm flex flex-col">
                                             <p className="text-base font-bold text-blue-950 mb-4">Top Expenses</p>
-                                            <div className="flex-1 h-56 relative">
+                                            <div className="chart-container flex-1 h-56 max-h-[300px]">
                                                 <ResponsiveContainer width="100%" height="100%">
                                                     <PieChart>
                                                         <Pie data={expensePieData} innerRadius={65} outerRadius={90} paddingAngle={3} dataKey="value">
