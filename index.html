@@ -97,17 +97,34 @@
             return `${thaiMonths[parseInt(m, 10)]} ${y.substring(2)}`;
         };
 
+        // Smart Date Parser (รองรับ M/D/Y, D/M/Y, Y-M-D และเวลาที่ติดมา)
         const parseDateString = (str) => {
-            if (!str) return null;
-            let match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-            if (match) return { month: match[2].padStart(2, '0'), year: parseInt(match[3], 10) };
+            if (!str || typeof str !== 'string') return null;
+            const s = str.trim();
             
-            match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-            if (match) return { month: match[2].padStart(2, '0'), year: parseInt(match[1], 10) };
+            // DD/MM/YYYY หรือ MM/DD/YYYY
+            let match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})(?:\s.*)?$/);
+            if (match) {
+                let m = parseInt(match[2], 10);
+                let d = parseInt(match[1], 10);
+                // สลับเดือน/วัน หาก Excel ส่งมาเป็นสไตล์อเมริกา (M/D/Y)
+                if (m > 12 && d <= 12) {
+                    let temp = m; m = d; d = temp;
+                } else if (m > 12) {
+                    return null; // วันที่ผิดพลาด
+                }
+                let year = parseInt(match[3], 10);
+                if (year < 100) year += (year < 50 ? 2000 : 1900); // แปลงปี 2 หลัก
+                return { month: m.toString().padStart(2, '0'), year };
+            }
             
-            match = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-            if (match) return { month: match[2].padStart(2, '0'), year: parseInt(match[3], 10) };
-            
+            // YYYY-MM-DD
+            match = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s.*)?$/);
+            if (match) {
+                let m = parseInt(match[2], 10);
+                if (m > 12) return null;
+                return { month: m.toString().padStart(2, '0'), year: parseInt(match[1], 10) };
+            }
             return null;
         };
 
@@ -212,7 +229,8 @@
                                 const fileData = new Uint8Array(evt.target.result);
                                 const workbook = window.XLSX.read(fileData, { type: 'array' });
                                 const ws = workbook.Sheets[workbook.SheetNames[0]];
-                                const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+                                // บังคับให้ Excel คายข้อมูลวันที่เป็น text format dd/mm/yyyy เสมอ
+                                const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'dd/mm/yyyy', defval: "" });
                                 processGLData(rows);
                             } catch (err) {
                                 console.error(err); setError('เกิดข้อผิดพลาดในการอ่านไฟล์ Excel (XLSX)');
@@ -248,48 +266,69 @@
                 const periodsSet = new Set(globalPeriods);
                 let currentAccount = null;
 
-                rows.forEach(row => {
+                rows.forEach((row) => {
                     if (!row || row.length < 2) return;
                     const cleanRow = row.map(cell => cell !== undefined && cell !== null ? cell.toString().trim() : '');
 
+                    // การตรวจจับโครงสร้างหัวตาราง (Header)
                     const isExpressOrig = cleanRow[1] && /^[1-5]\d{3}/.test(cleanRow[1]) && !cleanRow[1].includes('/') && !parseDateString(cleanRow[1]);
                     const isExpressShift = cleanRow[0] && /^[1-5]\d{3}/.test(cleanRow[0]) && !cleanRow[0].includes('(') && !cleanRow[0].includes('/') && !parseDateString(cleanRow[0]);
                     const isPeak = cleanRow[0] && /^(\d+)\s*\((.*)\)/.test(cleanRow[0]);
 
                     if (isExpressOrig) {
                         const codeStr = cleanRow[1], nameStr = cleanRow[3] || '', bf = parseNum(cleanRow[9]), category = parseInt(codeStr[0], 10);
-                        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, transactions: [] };
+                        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, format: 'ExpressOrig', transactions: [] };
                         if (bf !== 0 && !accounts[codeStr].bf_set) { accounts[codeStr].bf = bf; accounts[codeStr].bf_set = true; }
                         currentAccount = accounts[codeStr];
                     } else if (isExpressShift) {
                         const codeStr = cleanRow[0], nameStr = cleanRow[2] || '', bf = parseNum(cleanRow[8]), category = parseInt(codeStr[0], 10);
-                        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, transactions: [] };
+                        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, format: 'ExpressShift', transactions: [] };
                         if (bf !== 0 && !accounts[codeStr].bf_set) { accounts[codeStr].bf = bf; accounts[codeStr].bf_set = true; }
                         currentAccount = accounts[codeStr];
                     } else if (isPeak) {
                         const match = cleanRow[0].match(/^(\d+)\s*\((.*)\)/);
                         const codeStr = match[1], nameStr = match[2], category = parseInt(codeStr[0], 10);
-                        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, transactions: [] };
+                        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, format: 'Peak', transactions: [] };
                         currentAccount = accounts[codeStr];
                     }
 
                     if (currentAccount) {
-                        const bfIndex = cleanRow.findIndex(cell => cell === "ยอดยกมา");
+                        // ตรวจจับคำว่า 'ยอดยกมา' สำหรับ PEAK
+                        const bfIndex = cleanRow.findIndex(cell => cell.includes("ยอดยกมา"));
                         if (bfIndex !== -1 && !currentAccount.bf_set) {
                             let bfDr = parseNum(cleanRow[bfIndex + 1]), bfCr = parseNum(cleanRow[bfIndex + 2]);
                             const isDebitNature = currentAccount.category === 1 || currentAccount.category === 5;
-                            currentAccount.bf = (isDebitNature ? (bfDr - bfCr) : (bfCr - bfDr));
+                            currentAccount.bf += (isDebitNature ? (bfDr - bfCr) : (bfCr - bfDr));
                             currentAccount.bf_set = true;
                         }
 
                         let parsedDate = null, dr = 0, cr = 0;
-                        if (cleanRow[1] && parseDateString(cleanRow[1])) { parsedDate = parseDateString(cleanRow[1]); dr = parseNum(cleanRow[6]); cr = parseNum(cleanRow[7]); } 
-                        else if (cleanRow[0] && parseDateString(cleanRow[0])) { parsedDate = parseDateString(cleanRow[0]); dr = parseNum(cleanRow[5]); cr = parseNum(cleanRow[6]); } 
-                        else if (cleanRow[2] && parseDateString(cleanRow[2])) { parsedDate = parseDateString(cleanRow[2]); dr = parseNum(cleanRow[6]); cr = parseNum(cleanRow[7]); }
+                        
+                        // ค้นหาตำแหน่งวันที่ แบบยืดหยุ่นตาม Format ที่ตรวจเจอ
+                        if (currentAccount.format === 'ExpressOrig') {
+                            if (cleanRow[1] && parseDateString(cleanRow[1])) { 
+                                parsedDate = parseDateString(cleanRow[1]); dr = parseNum(cleanRow[6]); cr = parseNum(cleanRow[7]); 
+                            }
+                        } else if (currentAccount.format === 'ExpressShift') {
+                            if (cleanRow[0] && parseDateString(cleanRow[0])) { 
+                                parsedDate = parseDateString(cleanRow[0]); dr = parseNum(cleanRow[5]); cr = parseNum(cleanRow[6]); 
+                            }
+                        } else if (currentAccount.format === 'Peak') {
+                            // สแกนหาช่องวันที่ใน 5 คอลัมน์แรก (แก้ปัญหา Cell ใน Excel ถูกผสาน)
+                            let dateIdx = -1;
+                            for(let i=0; i<=5; i++) {
+                                if (cleanRow[i] && parseDateString(cleanRow[i])) { dateIdx = i; break; }
+                            }
+                            if (dateIdx !== -1) {
+                                parsedDate = parseDateString(cleanRow[dateIdx]);
+                                dr = parseNum(cleanRow[dateIdx + 4]); 
+                                cr = parseNum(cleanRow[dateIdx + 5]);
+                            }
+                        }
 
                         if (parsedDate) {
                             let yearNum = parsedDate.year;
-                            if (yearNum < 2500) yearNum += 543; 
+                            if (yearNum < 2500) yearNum += 543; // แปลง ค.ศ. เป็น พ.ศ. อัตโนมัติ
                             const periodStr = `${yearNum}-${parsedDate.month}`;
                             periodsSet.add(periodStr);
                             currentAccount.transactions.push({ period: periodStr, dr, cr });
@@ -297,12 +336,18 @@
                     }
                 });
 
-                setGlobalAccounts(accounts); setGlobalPeriods(periodsSet); generateReport(accounts, periodsSet);
+                if (periodsSet.size === 0) { 
+                    setError('ไม่พบข้อมูลรายการเคลื่อนไหว (กรุณาตรวจสอบว่ามีวันที่ในไฟล์ หรือรูปแบบถูกหรือไม่)'); 
+                    return; 
+                }
+
+                setGlobalAccounts(accounts); 
+                setGlobalPeriods(periodsSet); 
+                generateReport(accounts, periodsSet);
             };
 
             const generateReport = (accounts, periodsSet) => {
                 const periods = Array.from(periodsSet).sort();
-                if (periods.length === 0) { setError('ไม่พบข้อมูลรายการเคลื่อนไหว (กรุณาตรวจสอบว่ามีวันที่ในไฟล์)'); return; }
 
                 const aggregated = Object.values(accounts).map(acc => {
                     let currentBalance = acc.bf; const periodData = {};
