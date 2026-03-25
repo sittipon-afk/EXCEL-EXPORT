@@ -1,718 +1,927 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enterprise Financial Dashboard - FinPulse</title>
-<!-- Tailwind CSS -->
-<script src="https://cdn.tailwindcss.com"></script>
-<!-- Google Fonts (Inter) -->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<!-- FontAwesome for Icons -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<!-- React & ReactDOM -->
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<!-- Prop Types -->
-<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
-<!-- Babel -->
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<!-- Recharts -->
-<script src="https://unpkg.com/recharts@2.1.9/umd/Recharts.js"></script>
-<!-- SheetJS (Excel Export/Import) -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-<style>
-body { font-family: 'Inter', sans-serif; }
-.custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
-.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-table { border-spacing: 0; }
-@media print {
-body { background: white !important; }
-.no-print { display: none !important; }
-.no-print-padding { padding: 0 !important; }
-.sticky { position: static !important; }
-.border, .shadow-sm { box-shadow: none !important; border: none !important; border-bottom: 1px solid #f1f5f9 !important; }
-}
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-.modal-fade-in { animation: fadeIn 0.2s ease-out forwards; }
-/* Chart Containers Styling */
-.chart-container {
-position: relative;
-width: 100%;
-margin-left: auto;
-margin-right: auto;
-}
-</style>
-</head>
-<body class="bg-[#f8fafc] text-slate-900">
-<div id="root"></div>
-<script type="text/babel">
-const { useState, useMemo, useEffect } = React;
-const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } = window.Recharts;
+import React, { useState, useMemo, useEffect } from 'react';
+import { Upload, FileText, BarChart3, Printer, AlertCircle, RefreshCw, FileSpreadsheet, Trash2, LayoutDashboard, TrendingUp, TrendingDown, DollarSign, Percent, CheckCircle2 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, ComposedChart, Line, PieChart, Pie, Cell } from 'recharts';
 
-// --- Icon Wrapper ---
-const Icon = ({ name, size = 16, className = "" }) => {
-const faMap = {
-Upload: 'fa-solid fa-upload',
-FileText: 'fa-solid fa-file-lines',
-BarChart3: 'fa-solid fa-chart-column',
-TrendingUp: 'fa-solid fa-arrow-trend-up',
-TrendingDown: 'fa-solid fa-arrow-trend-down',
-Loader2: 'fa-solid fa-circle-notch fa-spin',
-Calendar: 'fa-regular fa-calendar',
-Printer: 'fa-solid fa-print',
-Landmark: 'fa-solid fa-building-columns',
-Database: 'fa-solid fa-database',
-CheckCircle2: 'fa-solid fa-circle-check',
-FileSpreadsheet: 'fa-solid fa-file-excel',
-PieChartIcon: 'fa-solid fa-chart-pie',
-DollarSign: 'fa-solid fa-dollar-sign',
-Wallet: 'fa-solid fa-wallet',
-ArrowUpRight: 'fa-solid fa-arrow-up',
-ArrowDownRight: 'fa-solid fa-arrow-down',
-Layers: 'fa-solid fa-layer-group',
-LineMsg: 'fa-brands fa-line',
-PaperPlane: 'fa-solid fa-paper-plane'
+// --- Helper Functions ---
+const parseNum = (str) => {
+  if (!str) return 0;
+  if (typeof str === 'number') return str;
+  let val = str.toString().trim().replace(/,/g, '');
+  if (val.startsWith('(') && val.endsWith(')')) {
+    return -parseFloat(val.slice(1, -1));
+  }
+  return parseFloat(val) || 0;
 };
-return <i className={`${faMap[name] || 'fa-solid fa-star'} ${className}`} style={{ fontSize: size }}></i>;
-};
-
-// --- Global Utils & Formatting ---
-const MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-const COLORS = ['#1e3a8a', '#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd'];
 
 const formatCurrency = (val) => {
-if (val === undefined || val === null || isNaN(val)) return '-';
-if (val === 0) return '-';
-const formatted = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-return val < 0 ? `(${formatted})` : formatted;
+  if (val === undefined || val === null) return '';
+  if (Math.abs(val) < 0.01) return '-';
+  const formatted = new Intl.NumberFormat('th-TH', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  }).format(val);
+  return val < 0 ? `(${new Intl.NumberFormat('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(val))})` : formatted;
 };
 
 const formatCompact = (val) => {
-if (val === undefined || val === null || isNaN(val)) return '-';
-if (val >= 1000000) return `฿ ${(val / 1000000).toFixed(2)}M`;
-if (val >= 1000) return `฿ ${(val / 1000).toFixed(0)}k`;
-return `฿ ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (val === undefined || val === null || isNaN(val)) return '-';
+  if (val >= 1000000) return `฿${(val / 1000000).toFixed(2)}M`;
+  if (val >= 1000) return `฿${(val / 1000).toFixed(0)}k`;
+  return `฿${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-// --- Accounting Engine ---
-const useFinancialEngine = (csvDataRows) => {
-const [financialData, setFinancialData] = useState({
-revenue: [], cogs: [], opex: [], assets_current: [], liabilities_current: [], equity: []
-});
+const formatPeriodName = (periodStr) => {
+  if (!periodStr) return '';
+  const [y, m] = periodStr.split('-');
+  const thaiMonths = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  return `${thaiMonths[parseInt(m, 10)]} ${y.substring(2)}`;
+};
 
-useEffect(() => {
-if (!csvDataRows || csvDataRows.length === 0) return;
-const accountMap = {};
-let currentAccountCode = "";
-let currentAccountName = "";
+// Smart Date Parser
+const parseDateString = (str) => {
+  if (!str) return null;
+  let match = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) return { month: match[2].padStart(2, '0'), year: parseInt(match[3], 10) };
+  
+  match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (match) return { month: match[2].padStart(2, '0'), year: parseInt(match[1], 10) };
+  
+  match = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (match) return { month: match[2].padStart(2, '0'), year: parseInt(match[3], 10) };
+  
+  return null;
+};
 
-csvDataRows.forEach(row => {
-if (!row || row.length === 0) return;
-const col0 = (row[0] || "").toString().trim();
-const accountMatch = col0.match(/^(\d+)\s*\((.*)\)/);
-if (accountMatch) {
-currentAccountCode = accountMatch[1];
-currentAccountName = accountMatch[2];
-if (!accountMap[currentAccountCode]) {
-accountMap[currentAccountCode] = { id: currentAccountCode, name: currentAccountName, openingBalance: 0, monthlyChange: Array(12).fill(0) };
+// Custom CSV Parser
+const parseCSV = (text) => {
+  const rows = [];
+  let currentRow = [];
+  let currentCell = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        currentCell += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === ',' && !inQuotes) {
+      currentRow.push(currentCell);
+      currentCell = '';
+    } else if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && text[i + 1] === '\n') i++;
+      currentRow.push(currentCell);
+      rows.push(currentRow);
+      currentRow = [];
+      currentCell = '';
+    } else {
+      currentCell += char;
+    }
+  }
+  if (currentCell || currentRow.length > 0) {
+    currentRow.push(currentCell);
+    rows.push(currentRow);
+  }
+  return rows;
+};
+
+const loadSheetJS = async () => {
+  if (window.XLSX) return true;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => reject(false);
+    document.head.appendChild(script);
+  });
+};
+
+const PIE_COLORS = ['#4f46e5', '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6', '#94a3b8'];
+
+export default function App() {
+  const [globalAccounts, setGlobalAccounts] = useState({});
+  const [globalPeriods, setGlobalPeriods] = useState(new Set());
+  
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [encoding, setEncoding] = useState('windows-874'); 
+  const [activeTab, setActiveTab] = useState('DASHBOARD');
+  const [selectedYear, setSelectedYear] = useState('ALL');
+
+  const availableYears = useMemo(() => {
+    if (!data || !data.periods) return [];
+    const years = new Set(data.periods.map(p => p.split('-')[0]));
+    return Array.from(years).sort();
+  }, [data]);
+
+  const displayPeriods = useMemo(() => {
+    if (!data || !data.periods) return [];
+    if (selectedYear === 'ALL') return data.periods;
+    return data.periods.filter(p => p.startsWith(selectedYear));
+  }, [data, selectedYear]);
+
+  // Dashboard Data Calculation
+  const dashboardData = useMemo(() => {
+    if (!data || !displayPeriods.length) return null;
+    let totalRev = 0;
+    let totalExp = 0;
+    let totalNI = 0;
+
+    const trendData = displayPeriods.map(p => {
+      const rev = data.pl.totals[p].rev || 0;
+      const exp = data.pl.totals[p].exp || 0;
+      const ni = data.pl.totals[p].ni || 0;
+      totalRev += rev;
+      totalExp += exp;
+      totalNI += ni;
+      return {
+        name: formatPeriodName(p),
+        รายได้: rev,
+        ค่าใช้จ่าย: exp,
+        กำไรสุทธิ: ni
+      };
+    });
+
+    const expMap = {};
+    data.pl.expenses.forEach(acc => {
+      let accTotal = 0;
+      displayPeriods.forEach(p => {
+        accTotal += (acc.amounts[p] || 0);
+      });
+      if (accTotal > 0) expMap[acc.name] = accTotal;
+    });
+
+    const sortedExp = Object.keys(expMap)
+      .map(k => ({ name: k, value: expMap[k] }))
+      .sort((a, b) => b.value - a.value);
+
+    const topExp = sortedExp.slice(0, 5);
+    const otherExp = sortedExp.slice(5).reduce((sum, e) => sum + e.value, 0);
+    if (otherExp > 0) topExp.push({ name: 'อื่นๆ', value: otherExp });
+
+    const margin = totalRev > 0 ? ((totalNI / totalRev) * 100).toFixed(2) : 0;
+
+    return { totalRev, totalExp, totalNI, margin, trendData, topExp };
+  }, [data, displayPeriods]);
+
+  useEffect(() => {
+    loadSheetJS();
+  }, []);
+
+  const clearData = () => {
+    setGlobalAccounts({});
+    setGlobalPeriods(new Set());
+    setData(null);
+    setSelectedYear('ALL');
+    setActiveTab('DASHBOARD');
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setLoading(true);
+    setError('');
+
+    const isExcel = file.name.match(/\.xlsx?$/i);
+
+    try {
+      if (isExcel) {
+        await loadSheetJS();
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const fileData = new Uint8Array(evt.target.result);
+            const workbook = window.XLSX.read(fileData, { type: 'array' });
+            const ws = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+            processGLData(rows);
+          } catch (err) {
+            console.error(err);
+            setError('เกิดข้อผิดพลาดในการอ่านไฟล์ Excel (XLSX)');
+          } finally {
+            setLoading(false);
+            e.target.value = null;
+          }
+        };
+        reader.onerror = () => { setError('ไม่สามารถอ่านไฟล์ได้'); setLoading(false); };
+        reader.readAsArrayBuffer(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const text = evt.target.result.replace(/^\uFEFF/, '');
+            const rows = parseCSV(text);
+            processGLData(rows);
+          } catch (err) {
+            console.error(err);
+            setError('เกิดข้อผิดพลาดในการอ่านไฟล์ CSV โปรดตรวจสอบรูปแบบไฟล์');
+          } finally {
+            setLoading(false);
+            e.target.value = null; 
+          }
+        };
+        reader.onerror = () => { setError('ไม่สามารถอ่านไฟล์ได้'); setLoading(false); };
+        reader.readAsText(file, encoding);
+      }
+    } catch (err) {
+      setError('ระบบไม่สามารถโหลดไลบรารีอ่านไฟล์ Excel ได้');
+      setLoading(false);
+    }
+  };
+
+  const processGLData = (rows) => {
+    const accounts = { ...globalAccounts };
+    const periodsSet = new Set(globalPeriods);
+    let currentAccount = null;
+
+    rows.forEach(row => {
+      if (!row || row.length < 2) return;
+      
+      const cleanRow = row.map(cell => cell !== undefined && cell !== null ? cell.toString().trim() : '');
+
+      const isExpressOrig = cleanRow[1] && /^[1-5]\d{3}/.test(cleanRow[1]) && !cleanRow[1].includes('/') && !parseDateString(cleanRow[1]);
+      const isExpressShift = cleanRow[0] && /^[1-5]\d{3}/.test(cleanRow[0]) && !cleanRow[0].includes('(') && !cleanRow[0].includes('/') && !parseDateString(cleanRow[0]);
+      const isPeak = cleanRow[0] && /^(\d+)\s*\((.*)\)/.test(cleanRow[0]);
+
+      if (isExpressOrig) {
+        const codeStr = cleanRow[1];
+        const nameStr = cleanRow[3] || '';
+        const bf = parseNum(cleanRow[9]);
+        const category = parseInt(codeStr[0], 10);
+        
+        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, transactions: [] };
+        if (bf !== 0 && !accounts[codeStr].bf_set) { accounts[codeStr].bf = bf; accounts[codeStr].bf_set = true; }
+        currentAccount = accounts[codeStr];
+      } 
+      else if (isExpressShift) {
+        const codeStr = cleanRow[0];
+        const nameStr = cleanRow[2] || '';
+        const bf = parseNum(cleanRow[8]);
+        const category = parseInt(codeStr[0], 10);
+        
+        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, transactions: [] };
+        if (bf !== 0 && !accounts[codeStr].bf_set) { accounts[codeStr].bf = bf; accounts[codeStr].bf_set = true; }
+        currentAccount = accounts[codeStr];
+      } 
+      else if (isPeak) {
+        const match = cleanRow[0].match(/^(\d+)\s*\((.*)\)/);
+        const codeStr = match[1];
+        const nameStr = match[2];
+        const category = parseInt(codeStr[0], 10);
+        
+        if (!accounts[codeStr]) accounts[codeStr] = { code: codeStr, name: nameStr, category, bf: 0, bf_set: false, transactions: [] };
+        currentAccount = accounts[codeStr];
+      }
+
+      if (currentAccount) {
+        const bfIndex = cleanRow.findIndex(cell => cell === "ยอดยกมา");
+        if (bfIndex !== -1 && !currentAccount.bf_set) {
+          let bfDr = parseNum(cleanRow[bfIndex + 1]);
+          let bfCr = parseNum(cleanRow[bfIndex + 2]);
+          const isDebitNature = currentAccount.category === 1 || currentAccount.category === 5;
+          currentAccount.bf = (isDebitNature ? (bfDr - bfCr) : (bfCr - bfDr));
+          currentAccount.bf_set = true;
+        }
+
+        let parsedDate = null;
+        let dr = 0;
+        let cr = 0;
+
+        if (cleanRow[1] && parseDateString(cleanRow[1])) {
+          parsedDate = parseDateString(cleanRow[1]);
+          dr = parseNum(cleanRow[6]);
+          cr = parseNum(cleanRow[7]);
+        } 
+        else if (cleanRow[0] && parseDateString(cleanRow[0])) {
+          parsedDate = parseDateString(cleanRow[0]);
+          dr = parseNum(cleanRow[5]);
+          cr = parseNum(cleanRow[6]);
+        } 
+        else if (cleanRow[2] && parseDateString(cleanRow[2])) {
+          parsedDate = parseDateString(cleanRow[2]);
+          dr = parseNum(cleanRow[6]);
+          cr = parseNum(cleanRow[7]);
+        }
+
+        if (parsedDate) {
+          let yearNum = parsedDate.year;
+          if (yearNum < 2500) yearNum += 543; 
+          
+          const periodStr = `${yearNum}-${parsedDate.month}`;
+          periodsSet.add(periodStr);
+          currentAccount.transactions.push({ period: periodStr, dr, cr });
+        }
+      }
+    });
+
+    setGlobalAccounts(accounts);
+    setGlobalPeriods(periodsSet);
+    generateReport(accounts, periodsSet);
+  };
+
+  const generateReport = (accounts, periodsSet) => {
+    const periods = Array.from(periodsSet).sort();
+    if (periods.length === 0) {
+      setError('ไม่พบข้อมูลรายการเคลื่อนไหว (กรุณาตรวจสอบว่ามีวันที่ในไฟล์)');
+      return;
+    }
+
+    const aggregated = Object.values(accounts).map(acc => {
+      let currentBalance = acc.bf;
+      const periodData = {};
+
+      periods.forEach(period => {
+        const txs = acc.transactions.filter(t => t.period === period);
+        const drSum = txs.reduce((sum, t) => sum + t.dr, 0);
+        const crSum = txs.reduce((sum, t) => sum + t.cr, 0);
+
+        currentBalance = currentBalance + drSum - crSum;
+
+        periodData[period] = {
+          netChange: drSum - crSum,
+          endBalance: currentBalance
+        };
+      });
+
+      return { ...acc, periodData };
+    });
+
+    const reportData = {
+      periods: periods,
+      pl: { revenues: [], expenses: [], totals: {} },
+      bs: { assets: [], liabilities: [], equities: [], totals: {} }
+    };
+
+    periods.forEach(p => {
+      reportData.pl.totals[p] = { rev: 0, exp: 0, ni: 0 };
+      reportData.bs.totals[p] = { asset: 0, liab: 0, baseEq: 0, totalEq: 0, retEarnBf: 0, currentNI: 0, totalLE: 0 };
+    });
+
+    aggregated.forEach(acc => {
+      const rowData = { code: acc.code, name: acc.name, amounts: {} };
+      let hasPLData = false;
+      let hasBSData = false;
+
+      periods.forEach(p => {
+        const pData = acc.periodData[p];
+        
+        if (acc.category === 4) {
+          const val = -pData.netChange; 
+          rowData.amounts[p] = val;
+          reportData.pl.totals[p].rev += val;
+          if (Math.abs(val) > 0.01) hasPLData = true;
+        } else if (acc.category === 5) {
+          const val = pData.netChange; 
+          rowData.amounts[p] = val;
+          reportData.pl.totals[p].exp += val;
+          if (Math.abs(val) > 0.01) hasPLData = true;
+        }
+
+        if (acc.category === 1) {
+          const val = pData.endBalance; 
+          rowData.amounts[p] = val;
+          reportData.bs.totals[p].asset += val;
+          if (Math.abs(val) > 0.01) hasBSData = true;
+        } else if (acc.category === 2) {
+          const val = -pData.endBalance; 
+          rowData.amounts[p] = val;
+          reportData.bs.totals[p].liab += val;
+          if (Math.abs(val) > 0.01) hasBSData = true;
+        } else if (acc.category === 3) {
+          const val = -pData.endBalance; 
+          rowData.amounts[p] = val;
+          reportData.bs.totals[p].baseEq += val;
+          if (Math.abs(val) > 0.01) hasBSData = true;
+        }
+      });
+
+      if (hasPLData && acc.category === 4) reportData.pl.revenues.push(rowData);
+      if (hasPLData && acc.category === 5) reportData.pl.expenses.push(rowData);
+      if (hasBSData && acc.category === 1) reportData.bs.assets.push(rowData);
+      if (hasBSData && acc.category === 2) reportData.bs.liabilities.push(rowData);
+      if (hasBSData && acc.category === 3) reportData.bs.equities.push(rowData);
+    });
+
+    periods.forEach((p) => {
+      reportData.pl.totals[p].ni = reportData.pl.totals[p].rev - reportData.pl.totals[p].exp;
+      reportData.bs.totals[p].currentNI = reportData.pl.totals[p].ni;
+      const plugRetEarnBf = reportData.bs.totals[p].asset - reportData.bs.totals[p].liab - reportData.bs.totals[p].baseEq - reportData.bs.totals[p].currentNI;
+      reportData.bs.totals[p].retEarnBf = plugRetEarnBf;
+      reportData.bs.totals[p].totalEq = reportData.bs.totals[p].baseEq + plugRetEarnBf + reportData.bs.totals[p].currentNI;
+      reportData.bs.totals[p].totalLE = reportData.bs.totals[p].liab + reportData.bs.totals[p].totalEq;
+    });
+
+    setData(reportData);
+    setActiveTab('DASHBOARD');
+  };
+
+  const handleExportExcel = () => {
+    const XLSX = window.XLSX;
+    if (!XLSX) {
+      alert('ไลบรารี Excel กำลังโหลด กรุณารอสักครู่แล้วกดใหม่');
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    const periods = displayPeriods;
+    const periodHeaders = periods.map(formatPeriodName);
+
+    const styles = {
+      header: { fill: { fgColor: { rgb: "172554" } }, font: { color: { rgb: "FFFFFF" }, bold: true, sz: 11 }, alignment: { horizontal: "center", vertical: "center" } },
+      month: { fill: { fgColor: { rgb: "1E3A8A" } }, font: { color: { rgb: "FFFFFF" }, bold: true, sz: 10 }, alignment: { horizontal: "center", vertical: "center" }, border: { left: { style: "thin", color: { rgb: "DBEAFE" } } } },
+      year: { fill: { fgColor: { rgb: "1D4ED8" } }, font: { color: { rgb: "FFFFFF" }, bold: true, sz: 11 }, alignment: { horizontal: "center", vertical: "center" } },
+      group: { fill: { fgColor: { rgb: "EFF6FF" } }, font: { bold: true, color: { rgb: "1E3A8A" } } },
+      total: { fill: { fgColor: { rgb: "DBEAFE" } }, font: { bold: true, color: { rgb: "1E3A8A" } }, border: { top: { style: "thin", color: { rgb: "93C5FD" } }, bottom: { style: "thin", color: { rgb: "93C5FD" } } } },
+      grand: { fill: { fgColor: { rgb: "172554" } }, font: { bold: true, color: { rgb: "FFFFFF" } } },
+      currency: { alignment: { horizontal: "right" }, numFmt: "#,##0.00;[Red](#,##0.00)", font: { sz: 10 } }
+    };
+
+    const buildSheet = (sheetName, sections, viewType) => {
+      const sheetData = [["รหัสบัญชี", "ชื่อบัญชี", ...periodHeaders, viewType === 'PL' ? "รวมทั้งสิ้น" : "ยอดคงเหลือล่าสุด"]];
+      
+      sections.forEach(sec => {
+        sheetData.push([sec.title.toUpperCase()]);
+        
+        sec.items.forEach(it => {
+          const vals = periods.map(p => it.amounts[p] || 0);
+          const t = viewType === 'PL' ? vals.reduce((a,b)=>a+b,0) : (vals[vals.length - 1] || 0);
+          sheetData.push([it.code, it.name, ...vals, t]);
+        });
+        
+        if (sec.totalRow) {
+          const totalVals = periods.map(p => sec.totalValues(p));
+          const gt = viewType === 'PL' ? totalVals.reduce((a,b)=>a+b,0) : (totalVals[totalVals.length - 1] || 0);
+          sheetData.push([sec.totalLabel, "", ...totalVals, gt]);
+        }
+        sheetData.push([]); 
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const ref = XLSX.utils.encode_cell({ c: C, r: R });
+          if (!ws[ref]) continue;
+          
+          if (R === 0) {
+            if (C < 2) ws[ref].s = styles.header;
+            else if (C < 2 + periods.length) ws[ref].s = styles.month;
+            else ws[ref].s = styles.year;
+          } else {
+            if (C >= 2) ws[ref].s = styles.currency;
+            const v0 = ws[XLSX.utils.encode_cell({c:0, r:R})]?.v?.toString() || "";
+            const v1 = ws[XLSX.utils.encode_cell({c:1, r:R})]?.v;
+            
+            if (v0 && !v1 && R > 0) ws[ref].s = styles.group; 
+            if (v0.includes("รวม") || v0.includes("กำไร")) ws[ref].s = { ...ws[ref].s, ...styles.total };
+            if (v0 === "รวมหนี้สินและส่วนของผู้ถือหุ้น" || v0 === "กำไร (ขาดทุน) สุทธิ" || v0 === "รวมสินทรัพย์") ws[ref].s = { ...ws[ref].s, ...styles.grand };
+          }
+        }
+      }
+      ws['!cols'] = [{wch:15}, {wch:45}, ...Array(periods.length + 1).fill({wch:16})];
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    };
+
+    buildSheet("Profit and Loss", [
+      { title: "รายได้", items: data.pl.revenues, totalRow: true, totalLabel: "รวมรายได้", totalValues: (p) => data.pl.totals[p].rev },
+      { title: "ค่าใช้จ่าย", items: data.pl.expenses, totalRow: true, totalLabel: "รวมค่าใช้จ่าย", totalValues: (p) => data.pl.totals[p].exp },
+      { title: "สรุปกำไรขาดทุน", items: [], totalRow: true, totalLabel: "กำไร (ขาดทุน) สุทธิ", totalValues: (p) => data.pl.totals[p].ni }
+    ], 'PL');
+
+    buildSheet("Balance Sheet", [
+      { title: "สินทรัพย์", items: data.bs.assets, totalRow: true, totalLabel: "รวมสินทรัพย์", totalValues: (p) => data.bs.totals[p].asset },
+      { title: "หนี้สิน", items: data.bs.liabilities, totalRow: true, totalLabel: "รวมหนี้สิน", totalValues: (p) => data.bs.totals[p].liab },
+      { title: "ส่วนของผู้ถือหุ้น", items: [
+          ...data.bs.equities, 
+          { code: '', name: 'กำไร(ขาดทุน) สะสมยกมา', amounts: Object.fromEntries(periods.map(p => [p, data.bs.totals[p].retEarnBf])) },
+          { code: '', name: 'กำไร(ขาดทุน) สุทธิประจำเดือน', amounts: Object.fromEntries(periods.map(p => [p, data.bs.totals[p].currentNI])) }
+        ], totalRow: true, totalLabel: "รวมส่วนของผู้ถือหุ้น", totalValues: (p) => data.bs.totals[p].totalEq },
+      { title: "การตรวจสอบ", items: [], totalRow: true, totalLabel: "รวมหนี้สินและส่วนของผู้ถือหุ้น", totalValues: (p) => data.bs.totals[p].totalLE }
+    ], 'BS');
+
+    XLSX.writeFile(wb, `Financial_Report_${new Date().getTime()}.xlsx`);
+  };
+
+  // --- Components ---
+  const KPICard = ({ title, value, icon: Icon, trend }) => (
+    <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm flex flex-col justify-between relative overflow-hidden">
+      <div className="flex justify-between items-start mb-2">
+        <div className={`p-2 rounded-lg ${trend === 'up' ? 'bg-emerald-50 text-emerald-600' : trend === 'down' ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
+          <Icon size={20} />
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-semibold text-gray-500 mb-1">{title}</p>
+        <h3 className="text-2xl font-black text-gray-800 tracking-tight">{value}</h3>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans p-4 sm:p-8">
+      <style>{`
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @media print {
+          .no-print { display: none !important; }
+        }
+      `}</style>
+      
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 print:hidden">
+          <div>
+            <h1 className="text-2xl font-bold text-indigo-900 flex items-center">
+              <BarChart3 className="mr-2" /> ระบบวิเคราะห์งบการเงิน
+            </h1>
+            <p className="text-gray-500 mt-1">รองรับไฟล์จากโปรแกรม Express และ PEAK (ผูกยอดสะสมอัตโนมัติ)</p>
+          </div>
+          
+          <div className="flex items-center gap-4 mt-4 sm:mt-0">
+            {data && (
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="bg-white border border-gray-200 text-indigo-800 px-4 py-2 rounded-xl text-sm font-bold shadow-sm outline-none cursor-pointer"
+              >
+                <option value="ALL">รวมทุกปีงบประมาณ</option>
+                {availableYears.map(y => (
+                  <option key={y} value={y}>ปี {y}</option>
+                ))}
+              </select>
+            )}
+
+            {data && (
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleExportExcel}
+                  className="flex items-center bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all"
+                >
+                  <FileSpreadsheet size={16} className="mr-2" /> Export Excel
+                </button>
+                <button 
+                  onClick={() => window.print()}
+                  className="flex items-center bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold shadow-sm transition-all"
+                >
+                  <Printer size={16} className="mr-2" /> พิมพ์ (PDF)
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6 print:hidden">
+          <div className="flex flex-col md:flex-row items-center gap-4">
+            <div className="w-full md:w-auto flex-1">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">อัปโหลดไฟล์ (.csv / .xlsx)</label>
+              <div className="relative border-2 border-dashed border-indigo-200 bg-indigo-50/30 rounded-xl p-4 hover:bg-indigo-50 transition cursor-pointer text-center">
+                <input 
+                  type="file" 
+                  accept=".csv, .xlsx, .xls"
+                  onChange={handleFileUpload}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="flex flex-col items-center justify-center pointer-events-none">
+                  <Upload className="text-indigo-500 mb-2" />
+                  <span className="text-sm text-indigo-900 font-medium">คลิกหรือลากไฟล์มาวางที่นี่ (.csv หรือ .xlsx ก็ได้)</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full md:w-64">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">รหัสภาษา (Encoding)</label>
+              <select 
+                value={encoding} 
+                onChange={(e) => setEncoding(e.target.value)}
+                className="w-full border border-gray-200 rounded-xl p-3 bg-gray-50 text-sm focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              >
+                <option value="windows-874">Windows-874 (Express / ไทย)</option>
+                <option value="UTF-8">UTF-8 (PEAK / สากล)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between">
+            <div>
+              {loading && <span className="text-indigo-600 flex items-center font-medium"><RefreshCw className="animate-spin mr-2" size={18} /> กำลังประมวลผล...</span>}
+              {error && <span className="text-red-600 flex items-center font-medium"><AlertCircle size={18} className="mr-2" /> {error}</span>}
+              {!loading && !error && Object.keys(globalAccounts).length > 0 && (
+                <span className="text-emerald-600 font-medium flex items-center"><CheckCircle2 size={16} className="mr-1" /> ดึงข้อมูลแล้ว {Object.keys(globalAccounts).length} บัญชี (อัปโหลดไฟล์ที่ 2 หรือ 3 เพิ่มได้)</span>
+              )}
+            </div>
+            
+            {Object.keys(globalAccounts).length > 0 && (
+              <button onClick={clearData} className="text-red-500 hover:text-red-700 flex items-center text-sm font-bold transition">
+                <Trash2 size={16} className="mr-1" /> ล้างข้อมูลทั้งหมด
+              </button>
+            )}
+          </div>
+        </div>
+
+        {data && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-8">
+            <div className="flex border-b border-gray-100 print:hidden bg-white">
+              <button
+                className={`flex-1 py-4 text-center font-bold transition-colors ${activeTab === 'DASHBOARD' ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-gray-500 hover:bg-gray-50'}`}
+                onClick={() => setActiveTab('DASHBOARD')}
+              >
+                <LayoutDashboard className="inline mr-2" size={18} /> ภาพรวม (Dashboard)
+              </button>
+              <button
+                className={`flex-1 py-4 text-center font-bold transition-colors ${activeTab === 'PL' ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-gray-500 hover:bg-gray-50'}`}
+                onClick={() => setActiveTab('PL')}
+              >
+                <FileText className="inline mr-2" size={18} /> งบกำไรขาดทุน (P&L)
+              </button>
+              <button
+                className={`flex-1 py-4 text-center font-bold transition-colors ${activeTab === 'BS' ? 'text-indigo-700 border-b-2 border-indigo-600 bg-indigo-50/50' : 'text-gray-500 hover:bg-gray-50'}`}
+                onClick={() => setActiveTab('BS')}
+              >
+                <BarChart3 className="inline mr-2" size={18} /> งบดุล (Balance Sheet)
+              </button>
+            </div>
+
+            {/* --- DASHBOARD TAB --- */}
+            {activeTab === 'DASHBOARD' && dashboardData && (
+              <div className="p-6 bg-gray-50/30">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <KPICard title="รายได้รวม (YTD)" value={formatCompact(dashboardData.totalRev)} icon={TrendingUp} trend="up" />
+                  <KPICard title="ค่าใช้จ่ายรวม (YTD)" value={formatCompact(dashboardData.totalExp)} icon={TrendingDown} trend="down" />
+                  <KPICard title="กำไร (ขาดทุน) สุทธิ" value={formatCompact(dashboardData.totalNI)} icon={DollarSign} trend={dashboardData.totalNI >= 0 ? "up" : "down"} />
+                  <KPICard title="อัตรากำไรสุทธิ (Net Margin)" value={`${dashboardData.margin}%`} icon={Percent} />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                    <h3 className="text-base font-bold text-gray-800 mb-6 flex items-center"><BarChart3 size={18} className="mr-2 text-indigo-500" /> แนวโน้มรายได้และค่าใช้จ่ายรายเดือน</h3>
+                    <div className="h-[320px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={dashboardData.trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} dy={10} />
+                          <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(v) => `${(v/1000).toFixed(0)}k`} />
+                          <RechartsTooltip formatter={(v) => formatCurrency(v)} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}} />
+                          <Legend wrapperStyle={{paddingTop: '20px', fontSize: '12px', fontWeight: 'bold'}} />
+                          <Bar dataKey="รายได้" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                          <Bar dataKey="ค่าใช้จ่าย" fill="#f43f5e" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                          <Line type="monotone" dataKey="กำไรสุทธิ" stroke="#10b981" strokeWidth={3} dot={{r: 4, strokeWidth: 2}} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex flex-col">
+                    <h3 className="text-base font-bold text-gray-800 mb-2 flex items-center"><PieChart size={18} className="mr-2 text-indigo-500" /> สัดส่วนค่าใช้จ่ายสูงสุด (Top 5)</h3>
+                    <div className="flex-1 min-h-[250px] relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={dashboardData.topExp} innerRadius={60} outerRadius={85} paddingAngle={2} dataKey="value">
+                            {dashboardData.topExp.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
+                          </Pie>
+                          <RechartsTooltip formatter={(v) => formatCurrency(v)} contentStyle={{fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', fontWeight: 'bold'}} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">รวมค่าใช้จ่าย</span>
+                        <span className="text-sm font-black text-gray-800">{formatCompact(dashboardData.totalExp)}</span>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-2 text-xs">
+                      {dashboardData.topExp.map((item, idx) => (
+                        <div key={idx} className="flex justify-between items-center">
+                          <span className="flex items-center text-gray-600 truncate mr-2" title={item.name}>
+                            <span className="w-2.5 h-2.5 rounded-full mr-2 shrink-0" style={{backgroundColor: PIE_COLORS[idx % PIE_COLORS.length]}}></span>
+                            <span className="truncate max-w-[120px]">{item.name}</span>
+                          </span>
+                          <span className="font-bold text-gray-800 shrink-0">{formatCompact(item.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Print Header */}
+            <div className="hidden print:block text-center pt-8 pb-4">
+              <h2 className="text-2xl font-bold">สรุปงบการเงิน</h2>
+              <h3 className="text-xl mt-1">{activeTab === 'PL' ? 'งบกำไรขาดทุน' : 'งบแสดงฐานะการเงิน (งบดุล)'}</h3>
+              <p className="text-gray-600 mt-2">รอบระยะเวลา {formatPeriodName(displayPeriods[0])} - {formatPeriodName(displayPeriods[displayPeriods.length - 1])}</p>
+            </div>
+
+            {/* --- TABLE CONTENT (P&L and BS) --- */}
+            {activeTab !== 'DASHBOARD' && (
+            <div className="overflow-x-auto border-t border-gray-100 custom-scrollbar">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead>
+                  <tr className="bg-gray-100 border-b border-gray-200">
+                    <th className="py-4 px-6 font-bold text-gray-700 min-w-[280px] sticky left-0 z-10 bg-gray-100 shadow-[1px_0_0_0_#e5e7eb]">รายการบัญชี</th>
+                    {displayPeriods.map(p => (
+                      <th key={p} className="py-4 px-4 font-bold text-gray-700 text-right min-w-[120px] bg-gray-100">
+                        {activeTab === 'PL' ? formatPeriodName(p) : `ณ สิ้น ${formatPeriodName(p)}`}
+                      </th>
+                    ))}
+                    {activeTab === 'PL' && <th className="py-4 px-6 font-bold text-indigo-900 bg-indigo-50 text-right min-w-[140px] sticky right-0 z-10 shadow-[-1px_0_0_0_#e5e7eb]">รวม (YTD)</th>}
+                  </tr>
+                </thead>
+
+                {activeTab === 'PL' && (
+                  <tbody>
+                    {/* --- รายได้ Section --- */}
+                    <tr className="bg-gray-100 border-b border-gray-200">
+                      <td className="py-3 px-6 font-bold text-indigo-900 bg-gray-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e5e7eb]">รายได้</td>
+                      <td colSpan={displayPeriods.length + 1} className="bg-gray-100"></td>
+                    </tr>
+                    {data.pl.revenues.map((acc, i) => {
+                      const rowTotal = displayPeriods.reduce((sum, p) => sum + (acc.amounts[p] || 0), 0);
+                      return (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 group">
+                        <td className="py-2.5 px-6 pl-10 sticky left-0 z-10 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#f3f4f6] text-gray-700">
+                          <span className="text-gray-400 mr-2 text-xs">{acc.code}</span> {acc.name}
+                        </td>
+                        {displayPeriods.map(p => (
+                          <td key={p} className="py-2.5 px-4 text-right font-mono text-[13px]">{formatCurrency(acc.amounts[p])}</td>
+                        ))}
+                        <td className="py-2.5 px-6 text-right font-bold font-mono text-[13px] text-indigo-900 bg-indigo-50 group-hover:bg-indigo-100 sticky right-0 z-10 shadow-[-1px_0_0_0_#f3f4f6]">
+                          {formatCurrency(rowTotal)}
+                        </td>
+                      </tr>
+                    )})}
+                    <tr className="border-b border-indigo-200">
+                      <td className="py-4 px-6 pl-10 text-indigo-900 font-bold sticky left-0 z-10 bg-indigo-100 shadow-[1px_0_0_0_#c7d2fe]">รวมรายได้</td>
+                      {displayPeriods.map(p => (
+                         <td key={p} className="py-4 px-4 text-right font-mono font-bold text-[13px] text-indigo-900 bg-indigo-50">
+                           {formatCurrency(data.pl.totals[p].rev)}
+                         </td>
+                      ))}
+                      <td className="py-4 px-6 text-right font-bold font-mono text-sm text-indigo-950 bg-indigo-200 sticky right-0 z-10 shadow-[-1px_0_0_0_#c7d2fe]">
+                        {formatCurrency(displayPeriods.reduce((sum, p) => sum + data.pl.totals[p].rev, 0))}
+                      </td>
+                    </tr>
+
+                    {/* --- ค่าใช้จ่าย Section --- */}
+                    <tr className="bg-gray-100 border-b border-gray-200">
+                      <td className="py-3 px-6 font-bold text-rose-900 bg-gray-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e5e7eb] mt-4">ค่าใช้จ่าย</td>
+                      <td colSpan={displayPeriods.length + 1} className="bg-gray-100"></td>
+                    </tr>
+                    {data.pl.expenses.map((acc, i) => {
+                      const rowTotal = displayPeriods.reduce((sum, p) => sum + (acc.amounts[p] || 0), 0);
+                      return (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 group">
+                        <td className="py-2.5 px-6 pl-10 sticky left-0 z-10 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#f3f4f6] text-gray-700">
+                          <span className="text-gray-400 mr-2 text-xs">{acc.code}</span> {acc.name}
+                        </td>
+                        {displayPeriods.map(p => (
+                          <td key={p} className="py-2.5 px-4 text-right font-mono text-[13px]">{formatCurrency(acc.amounts[p])}</td>
+                        ))}
+                        <td className="py-2.5 px-6 text-right font-bold font-mono text-[13px] text-rose-900 bg-rose-50 group-hover:bg-rose-100 sticky right-0 z-10 shadow-[-1px_0_0_0_#f3f4f6]">
+                          {formatCurrency(rowTotal)}
+                        </td>
+                      </tr>
+                    )})}
+                    <tr className="border-b border-rose-200">
+                      <td className="py-4 px-6 pl-10 text-rose-900 font-bold sticky left-0 z-10 bg-rose-100 shadow-[1px_0_0_0_#fecdd3]">รวมค่าใช้จ่าย</td>
+                      {displayPeriods.map(p => (
+                         <td key={p} className="py-4 px-4 text-right font-mono font-bold text-[13px] text-rose-900 bg-rose-50">
+                           {formatCurrency(data.pl.totals[p].exp)}
+                         </td>
+                      ))}
+                      <td className="py-4 px-6 text-right font-bold font-mono text-sm text-rose-950 bg-rose-200 sticky right-0 z-10 shadow-[-1px_0_0_0_#fecdd3]">
+                        {formatCurrency(displayPeriods.reduce((sum, p) => sum + data.pl.totals[p].exp, 0))}
+                      </td>
+                    </tr>
+
+                    {/* --- กำไรสุทธิ --- */}
+                    <tr className="border-b-4 border-double border-gray-300">
+                      <td className="py-5 px-6 font-black sticky left-0 z-10 bg-gray-100 shadow-[1px_0_0_0_#d1d5db]">กำไร (ขาดทุน) สุทธิ</td>
+                      {displayPeriods.map(p => {
+                        const ni = data.pl.totals[p].ni;
+                        return (
+                          <td key={p} className={`py-5 px-4 text-right font-bold font-mono bg-gray-50 ${ni >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                            {formatCurrency(ni)}
+                          </td>
+                        );
+                      })}
+                      <td className={`py-5 px-6 text-right font-black font-mono text-[15px] sticky right-0 z-10 shadow-[-1px_0_0_0_#d1d5db] bg-gray-200 ${displayPeriods.reduce((sum, p) => sum + data.pl.totals[p].ni, 0) >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        {formatCurrency(displayPeriods.reduce((sum, p) => sum + data.pl.totals[p].ni, 0))}
+                      </td>
+                    </tr>
+                  </tbody>
+                )}
+
+                {activeTab === 'BS' && (
+                  <tbody>
+                    {/* --- สินทรัพย์ Section --- */}
+                    <tr className="bg-gray-100 border-b border-gray-200">
+                      <td className="py-3 px-6 font-bold text-blue-900 bg-gray-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e5e7eb]">สินทรัพย์</td>
+                      <td colSpan={displayPeriods.length} className="bg-gray-100"></td>
+                    </tr>
+                    {data.bs.assets.map((acc, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 group">
+                        <td className="py-2.5 px-6 pl-10 sticky left-0 z-10 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#f3f4f6] text-gray-700">
+                          <span className="text-gray-400 mr-2 text-xs">{acc.code}</span> {acc.name}
+                        </td>
+                        {displayPeriods.map(p => (
+                          <td key={p} className="py-2.5 px-4 text-right font-mono text-[13px]">{formatCurrency(acc.amounts[p])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                    <tr className="border-b-2 border-blue-200">
+                      <td className="py-4 px-6 pl-10 text-blue-900 font-bold sticky left-0 z-10 bg-blue-100 shadow-[1px_0_0_0_#bfdbfe]">รวมสินทรัพย์</td>
+                      {displayPeriods.map(p => (
+                         <td key={p} className="py-4 px-4 text-right font-mono font-bold text-[13px] text-blue-900 bg-blue-50">
+                           {formatCurrency(data.bs.totals[p].asset)}
+                         </td>
+                      ))}
+                    </tr>
+
+                    {/* --- หนี้สิน Section --- */}
+                    <tr className="bg-gray-100 border-b border-gray-200">
+                      <td className="py-3 px-6 font-bold text-rose-900 bg-gray-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e5e7eb] mt-4">หนี้สิน</td>
+                      <td colSpan={displayPeriods.length} className="bg-gray-100"></td>
+                    </tr>
+                    {data.bs.liabilities.map((acc, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 group">
+                        <td className="py-2.5 px-6 pl-10 sticky left-0 z-10 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#f3f4f6] text-gray-700">
+                          <span className="text-gray-400 mr-2 text-xs">{acc.code}</span> {acc.name}
+                        </td>
+                        {displayPeriods.map(p => (
+                          <td key={p} className="py-2.5 px-4 text-right font-mono text-[13px]">{formatCurrency(acc.amounts[p])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                    <tr className="border-b border-rose-200">
+                      <td className="py-4 px-6 pl-10 text-rose-900 font-bold sticky left-0 z-10 bg-rose-100 shadow-[1px_0_0_0_#fecdd3]">รวมหนี้สิน</td>
+                      {displayPeriods.map(p => (
+                         <td key={p} className="py-4 px-4 text-right font-mono font-bold text-[13px] text-rose-900 bg-rose-50">
+                           {formatCurrency(data.bs.totals[p].liab)}
+                         </td>
+                      ))}
+                    </tr>
+
+                    {/* --- ส่วนของผู้ถือหุ้น Section --- */}
+                    <tr className="bg-gray-100 border-b border-gray-200">
+                      <td className="py-3 px-6 font-bold text-indigo-900 bg-gray-100 sticky left-0 z-10 shadow-[1px_0_0_0_#e5e7eb] mt-4">ส่วนของผู้ถือหุ้น</td>
+                      <td colSpan={displayPeriods.length} className="bg-gray-100"></td>
+                    </tr>
+                    {data.bs.equities.map((acc, i) => (
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50 group">
+                        <td className="py-2.5 px-6 pl-10 sticky left-0 z-10 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#f3f4f6] text-gray-700">
+                          <span className="text-gray-400 mr-2 text-xs">{acc.code}</span> {acc.name}
+                        </td>
+                        {displayPeriods.map(p => (
+                          <td key={p} className="py-2.5 px-4 text-right font-mono text-[13px]">{formatCurrency(acc.amounts[p])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                    <tr className="border-b border-gray-100 hover:bg-gray-50 group">
+                      <td className="py-2.5 px-6 pl-10 text-gray-500 italic sticky left-0 z-10 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#f3f4f6]">
+                        กำไร(ขาดทุน) สะสมยกมา
+                      </td>
+                      {displayPeriods.map(p => (
+                        <td key={p} className="py-2.5 px-4 text-right font-mono text-[13px] text-gray-500">{formatCurrency(data.bs.totals[p].retEarnBf)}</td>
+                      ))}
+                    </tr>
+                    <tr className="border-b border-gray-100 hover:bg-gray-50 group">
+                      <td className="py-2.5 px-6 pl-10 text-indigo-600 italic sticky left-0 z-10 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_#f3f4f6]">
+                        กำไร(ขาดทุน) สุทธิประจำเดือน
+                      </td>
+                      {displayPeriods.map(p => (
+                        <td key={p} className="py-2.5 px-4 text-right font-mono text-[13px] text-indigo-600">{formatCurrency(data.bs.totals[p].currentNI)}</td>
+                      ))}
+                    </tr>
+                    <tr className="border-b-2 border-indigo-200">
+                      <td className="py-4 px-6 pl-10 text-indigo-900 font-bold sticky left-0 z-10 bg-indigo-100 shadow-[1px_0_0_0_#c7d2fe]">รวมส่วนของผู้ถือหุ้น</td>
+                      {displayPeriods.map(p => (
+                         <td key={p} className="py-4 px-4 text-right font-mono font-bold text-[13px] text-indigo-900 bg-indigo-50">
+                           {formatCurrency(data.bs.totals[p].totalEq)}
+                         </td>
+                      ))}
+                    </tr>
+
+                    <tr className="border-b-4 border-double border-gray-300">
+                      <td className="py-5 px-6 font-black sticky left-0 z-10 bg-gray-100 shadow-[1px_0_0_0_#d1d5db]">รวมหนี้สินและส่วนของผู้ถือหุ้น</td>
+                      {displayPeriods.map(p => (
+                        <td key={p} className="py-5 px-4 text-right font-bold font-mono text-[14px] bg-gray-50">
+                          {formatCurrency(data.bs.totals[p].totalLE)}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                )}
+              </table>
+            </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
-}
-if (!currentAccountCode) return;
-const rowString = row.join("|");
-if (rowString.includes("ยอดยกมา")) {
-const debit = parseFloat((row[6] || "0").toString().replace(/,/g, '')) || 0;
-const credit = parseFloat((row[7] || "0").toString().replace(/,/g, '')) || 0;
-const isDebitNature = currentAccountCode.startsWith('1') || currentAccountCode.startsWith('5');
-accountMap[currentAccountCode].openingBalance = isDebitNature ? (debit - credit) : (credit - debit);
-}
-const dateStr = row[2];
-if (dateStr && dateStr.toString().includes('/')) {
-const parts = dateStr.toString().split('/');
-const month = parseInt(parts[1], 10) - 1;
-if (month >= 0 && month < 12) {
-const debit = parseFloat((row[6] || "0").toString().replace(/,/g, '')) || 0;
-const credit = parseFloat((row[7] || "0").toString().replace(/,/g, '')) || 0;
-const isDebitNature = currentAccountCode.startsWith('1') || currentAccountCode.startsWith('5');
-accountMap[currentAccountCode].monthlyChange[month] += (isDebitNature ? (debit - credit) : (credit - debit));
-}
-}
-});
-
-const categories = { revenue: [], cogs: [], opex: [], assets_current: [], liabilities_current: [], equity: [] };
-Object.values(accountMap).forEach(acc => {
-const code = acc.id;
-const isBS = code.startsWith('1') || code.startsWith('2') || code.startsWith('3');
-let currentBalance = acc.openingBalance;
-const processedMonthly = acc.monthlyChange.map(change => {
-if (isBS) { currentBalance += change; return currentBalance; }
-return change;
-});
-const finalAcc = { ...acc, monthly: processedMonthly };
-if (code.startsWith('4')) categories.revenue.push(finalAcc);
-else if (code.startsWith('51')) categories.cogs.push(finalAcc);
-else if (code.startsWith('5')) categories.opex.push(finalAcc);
-else if (code.startsWith('1')) categories.assets_current.push(finalAcc);
-else if (code.startsWith('2')) categories.liabilities_current.push(finalAcc);
-else if (code.startsWith('3')) categories.equity.push(finalAcc);
-});
-setFinancialData(categories);
-}, [csvDataRows]);
-
-const reportData = useMemo(() => {
-const sumM = (arr) => {
-const res = Array(12).fill(0);
-if (!arr || arr.length === 0) return res;
-arr.forEach(item => { if (item.monthly) item.monthly.forEach((v, i) => { if (i < 12) res[i] += v; }); });
-return res;
-};
-const totalRev = sumM(financialData.revenue);
-const totalCogs = sumM(financialData.cogs);
-const totalOpex = sumM(financialData.opex);
-const totalCombinedExp = totalCogs.map((c, i) => c + totalOpex[i]);
-const grossProfit = totalRev.map((r, i) => r - totalCogs[i]);
-const netIncomeMonthly = grossProfit.map((g, i) => g - totalOpex[i]);
-let runningNetProfit = 0;
-const netIncomeCumulative = netIncomeMonthly.map(val => {
-runningNetProfit += val;
-return runningNetProfit;
-});
-const totalAssets = sumM(financialData.assets_current);
-const totalLiabilities = sumM(financialData.liabilities_current);
-const totalEquityLedger = sumM(financialData.equity);
-const totalEquityReal = totalEquityLedger.map((e, i) => e + netIncomeCumulative[i]);
-const totalLiabEquity = totalLiabilities.map((l, i) => l + totalEquityReal[i]);
-const yearlyRev = totalRev.reduce((a, b) => a + b, 0);
-const yearlyNet = netIncomeMonthly.reduce((a, b) => a + b, 0);
-const netMargin = yearlyRev ? (yearlyNet / yearlyRev) * 100 : 0;
-return {
-totalRev, totalCogs, totalOpex, totalCombinedExp, grossProfit,
-netIncomeMonthly, netIncomeCumulative,
-totalAssets, totalLiabilities, totalEquityLedger, totalEquityReal, totalLiabEquity,
-yearlyRev, yearlyNet, netMargin
-};
-}, [financialData]);
-
-return { financialData, reportData };
-};
-
-// --- UI Components ---
-const KPICard = ({ title, value, subtext, iconName, trend, trendValue }) => (
-<div className="bg-white rounded-xl p-6 border-l-4 border-blue-800 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-<div className="flex justify-between items-start mb-4">
-<div className="bg-blue-50 p-2 rounded-lg text-blue-800 flex items-center justify-center w-10 h-10">
-<Icon name={iconName} size={18} />
-</div>
-{trend && (
-<span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${trend === 'up' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-{trend === 'up' ? <Icon name="ArrowUpRight" size={12} /> : <Icon name="ArrowDownRight" size={12} />}
-{trendValue}
-</span>
-)}
-</div>
-<div>
-<p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">{title}</p>
-<h3 className="text-2xl font-black text-blue-950 tracking-tight">{value}</h3>
-<p className="text-xs text-slate-400 mt-2 font-medium">{subtext}</p>
-</div>
-</div>
-);
-
-const StatementRow = ({ item, isSub = false, isProfitRow = false, viewType }) => {
-const isBS = viewType === 'bs';
-const total = isBS ? (item.monthly?.[11] || 0) : (item.monthly?.reduce((a, b) => a + b, 0) || 0);
-let labelClass = "text-slate-800 font-semibold";
-if (isSub) labelClass = "text-slate-500 pl-6";
-if (isProfitRow) labelClass = "text-blue-700 font-bold pl-6";
-return (
-<tr className="hover:bg-blue-50/50 border-b border-slate-100 transition-colors group">
-<td className="sticky left-0 bg-white group-hover:bg-blue-50/50 px-4 py-3 border-r border-slate-100 z-10 w-72 truncate text-sm" title={item.name}>
-<div className={labelClass}>
-{item.name}
-{!isProfitRow && <span className="text-[10px] text-slate-400 ml-2 font-mono">{item.id}</span>}
-</div>
-</td>
-{(item.monthly || Array(12).fill(0)).map((v, i) => (
-<td key={i} className={`px-2 py-3 text-right text-sm font-mono whitespace-nowrap ${v < 0 ? 'text-rose-600' : 'text-slate-600'}`}>
-{formatCurrency(v)}
-</td>
-))}
-<td className={`px-4 py-3 text-right text-sm font-bold bg-slate-50 group-hover:bg-blue-100/30 font-mono border-l border-slate-100 whitespace-nowrap ${total < 0 ? 'text-rose-600' : 'text-blue-950'}`}>
-{formatCurrency(total)}
-</td>
-</tr>
-);
-};
-
-const StatementTotalRow = ({ label, values, viewType, isGrandTotal = false }) => {
-const isBS = viewType === 'bs';
-const data = Array.isArray(values) ? values : Array(12).fill(0);
-const total = isBS ? (data[11] || 0) : data.reduce((a, b) => a + b, 0);
-const bgClass = isGrandTotal ? 'bg-blue-950 text-white' : 'bg-blue-50 text-blue-900';
-const borderClass = isGrandTotal ? '' : 'border-y border-blue-100';
-return (
-<tr className={`${bgClass} ${borderClass}`}>
-<td className={`sticky left-0 ${bgClass} px-4 py-4 z-10 text-sm font-bold tracking-wide border-r ${isGrandTotal ? 'border-blue-900' : 'border-blue-100'}`}>
-{label}
-</td>
-{data.map((v, i) => (
-<td key={i} className={`px-2 py-4 text-right text-sm font-mono font-medium whitespace-nowrap ${isGrandTotal ? 'text-blue-100' : 'text-blue-800'}`}>
-{formatCurrency(v)}
-</td>
-))}
-<td className={`px-4 py-4 text-right text-[15px] font-black font-mono whitespace-nowrap border-l ${isGrandTotal ? 'border-blue-900 text-white' : 'border-blue-200 text-blue-950'}`}>
-{formatCurrency(total)}
-</td>
-</tr>
-);
-};
-
-// --- Main Application ---
-const App = () => {
-const [activeTab, setActiveTab] = useState('import');
-const [statementView, setStatementView] = useState('pnl');
-const [isImporting, setIsImporting] = useState(false);
-const [rawCsvData, setRawCsvData] = useState(null);
-const [fileName, setFileName] = useState("");
-
-// Line Message State
-const [isSendingLine, setIsSendingLine] = useState(false);
-const [showNotification, setShowNotification] = useState(false);
-const [notificationMsg, setNotificationMsg] = useState("");
-const [notificationError, setNotificationError] = useState(false);
-
-const { financialData, reportData } = useFinancialEngine(rawCsvData);
-const importSuccess = rawCsvData !== null;
-
-// ==========================================
-// Google Apps Script Web App URL
-// ==========================================
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzLx8n2YnNksyiBcp-dWzAwsLH-J2pkz9Mi1qkJwslkohZFvjxzLG7mHsoZnGDlnmNxXA/exec";
-
-// --- ฟังก์ชันแยกสำหรับสร้างโครงสร้าง Excel ---
-const getExcelWorkbook = () => {
-const wb = XLSX.utils.book_new();
-const styles = {
-header: { fill: { fgColor: { rgb: "172554" } }, font: { color: { rgb: "FFFFFF" }, bold: true, sz: 11 }, alignment: { horizontal: "center", vertical: "center" } },
-month: { fill: { fgColor: { rgb: "1E3A8A" } }, font: { color: { rgb: "FFFFFF" }, bold: true, sz: 10 }, alignment: { horizontal: "center", vertical: "center" }, border: { left: { style: "thin", color: { rgb: "DBEAFE" } } } },
-year: { fill: { fgColor: { rgb: "1D4ED8" } }, font: { color: { rgb: "FFFFFF" }, bold: true, sz: 11 }, alignment: { horizontal: "center", vertical: "center" } },
-group: { fill: { fgColor: { rgb: "EFF6FF" } }, font: { bold: true, color: { rgb: "1E3A8A" } } },
-total: { fill: { fgColor: { rgb: "DBEAFE" } }, font: { bold: true, color: { rgb: "1E3A8A" } }, border: { top: { style: "thin", color: { rgb: "93C5FD" } }, bottom: { style: "thin", color: { rgb: "93C5FD" } } } },
-grand: { fill: { fgColor: { rgb: "172554" } }, font: { bold: true, color: { rgb: "FFFFFF" } } },
-currency: { alignment: { horizontal: "right" }, numFmt: "#,##0.00;[Red](#,##0.00)", font: { sz: 10 } }
-};
-
-const buildSheet = (sheetName, sections, viewType) => {
-const data = [["Account Code", "Description", ...MONTHS_SHORT, viewType === 'pnl' ? "Year Total" : "Ending Balance"]];
-sections.forEach(sec => {
-data.push([sec.title.toUpperCase()]);
-sec.items.forEach(it => {
-const t = viewType === 'pnl' ? (it.monthly?.reduce((a,b)=>a+b,0)||0) : (it.monthly?.[11]||0);
-data.push([it.id, it.name, ...(it.monthly || Array(12).fill(0)), t]);
-});
-if (sec.totalRow) data.push([sec.totalLabel, "", ...(sec.totalValues || Array(12).fill(0)), (sec.grandTotal || 0)]);
-data.push([]);
-});
-const ws = XLSX.utils.aoa_to_sheet(data);
-const range = XLSX.utils.decode_range(ws['!ref']);
-for (let R = range.s.r; R <= range.e.r; ++R) {
-for (let C = range.s.c; C <= range.e.c; ++C) {
-const ref = XLSX.utils.encode_cell({ c: C, r: R });
-if (!ws[ref]) continue;
-if (R === 0) {
-if (C < 2) ws[ref].s = styles.header;
-else if (C < 14) ws[ref].s = styles.month;
-else ws[ref].s = styles.year;
-} else {
-if (C >= 2) ws[ref].s = styles.currency;
-const v0 = ws[XLSX.utils.encode_cell({c:0, r:R})]?.v?.toString() || "";
-const v1 = ws[XLSX.utils.encode_cell({c:1, r:R})]?.v;
-if (v0 && !v1 && R > 0) ws[ref].s = styles.group;
-if (v0.includes("TOTAL") || v0.includes("NET")) ws[ref].s = { ...ws[ref].s, ...styles.total };
-if (v0 === "TOTAL LIAB & EQUITY" || v0 === "NET INCOME" || v0 === "TOTAL ASSETS") ws[ref].s = { ...ws[ref].s, ...styles.grand };
-}
-}
-}
-ws['!cols'] = [{wch:12}, {wch:40}, ...Array(13).fill({wch:14})];
-XLSX.utils.book_append_sheet(wb, ws, sheetName);
-};
-
-buildSheet("Profit and Loss", [
-{ title: "Revenue", items: financialData.revenue, totalRow: true, totalLabel: "TOTAL REVENUE", totalValues: reportData.totalRev, grandTotal: reportData.yearlyRev },
-{ title: "Cost & Expenses", items: [...financialData.cogs, ...financialData.opex], totalRow: true, totalLabel: "TOTAL EXPENSES", totalValues: reportData.totalCombinedExp, grandTotal: reportData.totalCombinedExp.reduce((a,b)=>a+b,0) },
-{ title: "Summary", items: [], totalRow: true, totalLabel: "NET INCOME", totalValues: reportData.netIncomeMonthly, grandTotal: reportData.yearlyNet }
-], 'pnl');
-
-buildSheet("Balance Sheet", [
-{ title: "Assets", items: financialData.assets_current, totalRow: true, totalLabel: "TOTAL ASSETS", totalValues: reportData.totalAssets, grandTotal: reportData.totalAssets[11] },
-{ title: "Liabilities", items: financialData.liabilities_current, totalRow: true, totalLabel: "TOTAL LIABILITIES", totalValues: reportData.totalLiabilities, grandTotal: reportData.totalLiabilities[11] },
-{ title: "Equity", items: [...financialData.equity, { id: '', name: 'Net Profit (Current Period)', monthly: reportData.netIncomeCumulative }], totalRow: true, totalLabel: "TOTAL EQUITY", totalValues: reportData.totalEquityReal, grandTotal: reportData.totalEquityReal[11] },
-{ title: "Verification", items: [], totalRow: true, totalLabel: "TOTAL LIAB & EQUITY", totalValues: reportData.totalLiabEquity, grandTotal: reportData.totalLiabEquity[11] }
-], 'bs');
-
-return wb;
-};
-
-// ==========================================
-// ✅ ฟังก์ชันส่ง LINE ที่แก้ไขแล้ว
-// ==========================================
-const handleSendToLine = async () => {
-if (!importSuccess) {
-setNotificationError(true);
-setNotificationMsg("กรุณา import ข้อมูลก่อนส่งครับ");
-setShowNotification(true);
-return;
-}
-
-setIsSendingLine(true);
-setNotificationError(false);
-
-const message = `
-📊 สรุปงบการเงิน (FinPulse)
-🏢 บริษัท: Amper Co., Ltd.
-📅 ปีบัญชี: FY 2025
------------------------
-💰 รายได้รวม: ${formatCompact(reportData.yearlyRev)}
-📉 ค่าใช้จ่ายรวม: ${formatCompact(reportData.totalCombinedExp.reduce((a,b)=>a+b,0))}
-💵 กำไร(ขาดทุน)สุทธิ: ${formatCompact(reportData.yearlyNet)}
-📈 อัตรากำไรสุทธิ: ${reportData.netMargin.toFixed(2)}%
------------------------
-🏦 สินทรัพย์รวม: ${formatCompact(reportData.totalAssets[11] || 0)}
-หนี้สินรวม: ${formatCompact(reportData.totalLiabilities[11] || 0)}
-💼 ส่วนของผู้ถือหุ้น: ${formatCompact(reportData.totalEquityReal[11] || 0)}
-`;
-
-try {
-const wb = getExcelWorkbook();
-const fileBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
-
-const payload = {
-message: message,
-fileName: `Financial_Report_DeepBlue_${new Date().getFullYear()}.xlsx`,
-fileBase64: fileBase64
-};
-
-// ✅ ส่งแบบ JSON (แก้ไขจาก no-cors + text/plain)
-const response = await fetch(WEB_APP_URL, {
-method: 'POST',
-headers: {
-'Content-Type': 'application/json',
-},
-body: JSON.stringify(payload)
-});
-
-const result = await response.json();
-
-if (result.status === 'success') {
-setNotificationMsg("✅ ส่งคำสั่งเข้า LINE เรียบร้อยแล้ว! ตรวจสอบแชทบอทของคุณได้เลยครับ");
-} else {
-throw new Error(result.message || 'ส่งไม่สำเร็จ');
-}
-
-} catch (error) {
-console.error("Fetch Error:", error);
-setNotificationError(true);
-setNotificationMsg(`❌ ส่งไม่สำเร็จ: ${error.message}`);
-} finally {
-setIsSendingLine(false);
-setShowNotification(true);
-setTimeout(() => setShowNotification(false), 5000);
-}
-};
-
-const handleFileUpload = (e) => {
-const file = e.target.files[0];
-if (!file) return;
-setFileName(file.name);
-setIsImporting(true);
-const reader = new FileReader();
-reader.onload = (evt) => {
-try {
-const bstr = evt.target.result;
-const wb = XLSX.read(bstr, { type: 'binary' });
-const wsname = wb.SheetNames[0];
-const data = XLSX.utils.sheet_to_json(wb.Sheets[wsname], { header: 1 });
-setRawCsvData(data);
-setTimeout(() => {
-setIsImporting(false);
-setActiveTab('dashboard');
-}, 500);
-} catch (err) {
-console.error(err);
-setIsImporting(false);
-alert("Failed to read the file.");
-}
-};
-reader.readAsBinaryString(file);
-};
-
-const handleExportExcel = () => {
-if (typeof XLSX === 'undefined') return alert("Loading export engine...");
-const wb = getExcelWorkbook();
-XLSX.writeFile(wb, `Financial_Report_DeepBlue_${new Date().getFullYear()}.xlsx`);
-};
-
-const chartData = useMemo(() => {
-return MONTHS_SHORT.map((m, i) => ({
-name: m,
-Revenue: reportData.totalRev[i],
-Expenses: reportData.totalCombinedExp[i],
-Profit: reportData.netIncomeMonthly[i],
-}));
-}, [reportData]);
-
-const expensePieData = useMemo(() => {
-return financialData.opex.map(exp => ({
-name: exp.name,
-value: exp.monthly.reduce((a,b)=>a+b,0)
-})).filter(e => e.value > 0).sort((a,b) => b.value - a.value).slice(0, 5);
-}, [financialData.opex]);
-
-return (
-<div className="flex">
-{/* Notification Toast */}
-{showNotification && (
-<div className={`fixed top-24 right-10 z-50 text-white px-6 py-4 rounded-xl shadow-xl flex items-start gap-3 modal-fade-in font-bold max-w-sm ${notificationError ? 'bg-rose-600' : 'bg-[#00B900]'}`}>
-<Icon name={notificationError ? "TrendingDown" : "CheckCircle2"} size={18} className="mt-0.5 shrink-0" />
-<span className="text-sm leading-relaxed">{notificationMsg}</span>
-</div>
-)}
-
-<aside className="w-64 bg-blue-950 flex flex-col z-50 fixed h-full no-print shadow-2xl border-r border-blue-900">
-<div className="h-20 flex items-center px-8 border-b border-blue-900/50 bg-blue-950">
-<div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white mr-3 shadow-lg shadow-blue-900/50">
-<Icon name="Layers" size={16} />
-</div>
-<h1 className="text-xl font-bold tracking-tight text-white">Fin<span className="text-blue-400">Pulse</span></h1>
-</div>
-<div className="flex-1 py-6 px-4 flex flex-col gap-2">
-<p className="px-4 text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2">Finance Engine</p>
-{[
-{ id: 'import', iconName: 'Upload', label: 'Data Import' },
-{ id: 'dashboard', iconName: 'BarChart3', label: 'Performance Analytics' },
-{ id: 'statements', iconName: 'FileText', label: 'Ledger Statements' },
-].map(item => (
-<button
-key={item.id}
-onClick={() => setActiveTab(item.id)}
-className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-semibold ${
-activeTab === item.id
-? 'bg-blue-800 text-white shadow-md shadow-blue-900/20'
-: 'text-slate-400 hover:bg-blue-900/50 hover:text-white'
-}`}
->
-<Icon name={item.iconName} size={16} className={activeTab === item.id ? 'text-blue-400' : 'text-slate-400/70'} />
-<span>{item.label}</span>
-</button>
-))}
-</div>
-<div className="p-6 border-t border-blue-900/50 bg-blue-950/50">
-<div className="flex items-center gap-3">
-<div className="w-9 h-9 bg-blue-800 rounded-full flex items-center justify-center text-xs font-bold text-white border border-blue-700">
-AM
-</div>
-<div>
-<p className="text-sm font-bold text-white">Amper Co., Ltd.</p>
-<p className="text-xs text-slate-400">Active Workspace</p>
-</div>
-</div>
-</div>
-</aside>
-
-<main className="flex-1 ml-64 flex flex-col min-h-screen bg-[#f4f7fb]">
-<header className="h-20 flex items-center justify-between px-10 sticky top-0 z-40 no-print bg-white/80 backdrop-blur-md border-b border-blue-100">
-<div className="flex items-center gap-4">
-<h2 className="font-bold text-xl text-blue-950 tracking-tight">
-{activeTab === 'import' && 'Integration Hub'}
-{activeTab === 'dashboard' && 'Financial Overview'}
-{activeTab === 'statements' && 'General Ledger Reports'}
-</h2>
-<span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-200">FY 2025</span>
-</div>
-<div className="flex items-center gap-4">
-{importSuccess && (
-<span className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-bold">
-<Icon name="CheckCircle2" size={14} /> Data Synced
-</span>
-)}
-<button onClick={() => window.print()} className="p-2 text-slate-500 hover:text-blue-700 hover:bg-blue-50 transition-colors bg-white border border-slate-200 rounded-lg shadow-sm" title="Print Report">
-<Icon name="Printer" size={16} />
-</button>
-{/* LINE Button */}
-<button
-onClick={handleSendToLine}
-disabled={!importSuccess || isSendingLine}
-className="flex items-center gap-2 bg-[#00B900] hover:bg-[#009900] text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-[#00B900]/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
->
-{isSendingLine ? <Icon name="Loader2" size={16} className="fa-spin" /> : <Icon name="LineMsg" size={16} />}
-{isSendingLine ? 'กำลังส่ง...' : 'Send to Line'}
-</button>
-<button
-onClick={handleExportExcel}
-disabled={!importSuccess}
-className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-blue-700/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
->
-<Icon name="FileSpreadsheet" size={14} /> Export to Excel
-</button>
-</div>
-</header>
-
-<div className="flex-1 overflow-auto p-10 pt-8 no-print-padding">
-{activeTab === 'import' && (
-<div className="max-w-2xl mt-4">
-<div className="bg-white border border-blue-100 rounded-2xl p-12 shadow-sm">
-<div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-6 border border-blue-100">
-<Icon name="Database" size={24} className="text-blue-700" />
-</div>
-<h3 className="text-2xl font-bold text-blue-950 mb-2">Upload General Ledger</h3>
-<p className="text-slate-500 mb-10 leading-relaxed">Select a `.xlsx` or `.csv` file exported from Accrelate. The system will parse accounts, balance the sheets, and calculate monthly flow automatically.</p>
-<div className="bg-[#f8fafc] p-10 text-center border-2 border-dashed border-blue-200 rounded-2xl hover:bg-blue-50 hover:border-blue-400 transition-all relative group cursor-pointer">
-<input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onChange={handleFileUpload} accept=".xlsx, .csv" />
-{isImporting ? (
-<div className="text-blue-600 mb-4 flex justify-center"><Icon name="Loader2" size={32} className="fa-spin" /></div>
-) : (
-<div className="text-blue-500 mb-4 flex justify-center group-hover:scale-110 transition-transform"><Icon name="Upload" size={32} /></div>
-)}
-<p className="text-base font-bold text-blue-900 mb-1">Click or drag file here</p>
-<p className="text-sm text-slate-500">Supports standard Accrelate exports</p>
-</div>
-</div>
-</div>
-)}
-
-{activeTab === 'dashboard' && importSuccess && (
-<div className="space-y-8 animate-in fade-in duration-500">
-<div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-<KPICard title="Revenue YTD" value={formatCompact(reportData.yearlyRev)} iconName="TrendingUp" trend="up" trendValue="12.5%" />
-<KPICard title="Expenses YTD" value={formatCompact(reportData.totalCombinedExp.reduce((a,b)=>a+b,0))} iconName="TrendingDown" />
-<KPICard title="Net Income" value={formatCompact(reportData.yearlyNet)} iconName="DollarSign" trend="up" trendValue="8.4%" />
-<KPICard title="Net Margin" value={`${reportData.netMargin.toFixed(1)}%`} iconName="PieChartIcon" />
-</div>
-
-<div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-<div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-blue-100 shadow-sm">
-<p className="text-base font-bold text-blue-950 mb-6">Income vs Expense Trend</p>
-<div className="chart-container h-80 max-h-[400px]">
-<ResponsiveContainer width="100%" height="100%">
-<ComposedChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-<CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-<XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 500}} dy={10} />
-<YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 500}} tickFormatter={(v) => `${(v/1000)}k`} />
-<Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '13px', fontWeight: 'bold', color: '#1e3a8a'}} formatter={(v) => `฿${v.toLocaleString()}`} />
-<Bar dataKey="Revenue" fill="#1e3a8a" radius={[6, 6, 6, 6]} maxBarSize={30} />
-<Bar dataKey="Expenses" fill="#60a5fa" radius={[6, 6, 6, 6]} maxBarSize={30} />
-<Line type="monotone" dataKey="Profit" stroke="#eab308" strokeWidth={4} dot={{r: 5, fill: '#eab308', strokeWidth: 2, stroke: '#fff'}} />
-</ComposedChart>
-</ResponsiveContainer>
-</div>
-</div>
-
-<div className="bg-white p-8 rounded-2xl border border-blue-100 shadow-sm flex flex-col">
-<p className="text-base font-bold text-blue-950 mb-4">Top Expenses</p>
-<div className="chart-container flex-1 h-56 max-h-[300px]">
-<ResponsiveContainer width="100%" height="100%">
-<PieChart>
-<Pie data={expensePieData} innerRadius={65} outerRadius={90} paddingAngle={3} dataKey="value">
-{expensePieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-</Pie>
-<Tooltip formatter={(v) => `฿${v.toLocaleString()}`} contentStyle={{fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', fontWeight: 'bold'}} />
-</PieChart>
-</ResponsiveContainer>
-<div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
-<span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Total</span>
-<span className="text-lg font-black text-blue-950">{formatCompact(reportData.totalOpex.reduce((a,b)=>a+b,0))}</span>
-</div>
-</div>
-</div>
-</div>
-</div>
-)}
-
-{activeTab === 'statements' && importSuccess && (
-<div className="bg-white rounded-2xl border border-blue-100 flex flex-col overflow-hidden shadow-sm animate-in fade-in duration-500 print:shadow-none print:border-none">
-<div className="px-8 py-8 border-b border-blue-100 flex justify-between items-center bg-white">
-<div className="flex bg-slate-100 p-1.5 rounded-xl">
-<button onClick={() => setStatementView('pnl')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${statementView === 'pnl' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-blue-700'}`}>Profit & Loss</button>
-<button onClick={() => setStatementView('bs')} className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${statementView === 'bs' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-blue-700'}`}>Balance Sheet</button>
-</div>
-<div className="text-right">
-<h2 className="text-2xl font-black text-blue-950 tracking-tight uppercase">{statementView === 'pnl' ? 'Income Statement' : 'Balance Sheet'}</h2>
-<p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Amper Co., Ltd. &middot; FY 2025</p>
-</div>
-</div>
-<div className="overflow-x-auto w-full custom-scrollbar">
-<table className="w-full min-w-[1400px] border-collapse text-left text-sm">
-<thead>
-<tr>
-<th className="sticky left-0 z-20 bg-blue-950 px-6 py-5 border-b border-blue-900 border-r border-blue-900 w-80">
-<span className="text-xs font-bold text-white uppercase tracking-widest">Account</span>
-</th>
-{MONTHS_SHORT.map((m, i) => (
-<th key={i} className="px-3 py-5 text-xs font-bold text-blue-100 uppercase tracking-widest text-right border-b border-blue-900 bg-blue-900 border-r border-blue-800/50">
-{m}
-</th>
-))}
-<th className="px-6 py-5 text-xs font-bold text-white uppercase tracking-widest text-right border-b border-l border-blue-900 bg-blue-950">
-{statementView === 'pnl' ? 'YTD Total' : 'Balance'}
-</th>
-</tr>
-</thead>
-<tbody>
-{statementView === 'pnl' ? (
-<>
-<tr><td colSpan="14" className="px-6 py-4 text-[11px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50/50">Revenue</td></tr>
-{financialData.revenue.map((item, i) => <StatementRow key={i} item={item} viewType={statementView} />)}
-<StatementTotalRow label="Total Revenue" values={reportData.totalRev} viewType={statementView} />
-<tr><td colSpan="14" className="px-6 py-4 text-[11px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50/50 pt-8">Expenses</td></tr>
-{[...financialData.cogs, ...financialData.opex].map((item, i) => <StatementRow key={i} item={item} isSub viewType={statementView} />)}
-<StatementTotalRow label="Total Expenses" values={reportData.totalCombinedExp} viewType={statementView} />
-<tr className="h-4"><td colSpan="14" className="bg-white"></td></tr>
-<StatementTotalRow label="Net Income" values={reportData.netIncomeMonthly} viewType={statementView} isGrandTotal />
-</>
-) : (
-<>
-<tr><td colSpan="14" className="px-6 py-4 text-[11px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50/50">Assets</td></tr>
-{financialData.assets_current.map((item, i) => <StatementRow key={i} item={item} isSub viewType={statementView} />)}
-<StatementTotalRow label="Total Assets" values={reportData.totalAssets} viewType={statementView} isGrandTotal />
-<tr><td colSpan="14" className="px-6 py-4 text-[11px] font-bold text-rose-600 uppercase tracking-widest bg-rose-50/50 pt-8">Liabilities</td></tr>
-{financialData.liabilities_current.map((item, i) => <StatementRow key={i} item={item} isSub viewType={statementView} />)}
-<StatementTotalRow label="Total Liabilities" values={reportData.totalLiabilities} viewType={statementView} />
-<tr><td colSpan="14" className="px-6 py-4 text-[11px] font-bold text-indigo-600 uppercase tracking-widest bg-indigo-50/50 pt-8">Equity</td></tr>
-{financialData.equity.map((item, i) => <StatementRow key={i} item={item} isSub viewType={statementView} />)}
-<StatementRow item={{ name: 'Retained Earnings (Current YTD)', monthly: reportData.netIncomeCumulative }} isProfitRow viewType={statementView} />
-<StatementTotalRow label="Total Equity" values={reportData.totalEquityReal} viewType={statementView} />
-<tr className="h-4"><td colSpan="14" className="bg-white"></td></tr>
-<StatementTotalRow label="Total Liab. & Equity" values={reportData.totalLiabEquity} viewType={statementView} isGrandTotal />
-</>
-)}
-</tbody>
-</table>
-</div>
-</div>
-)}
-
-{activeTab !== 'import' && !importSuccess && (
-<div className="h-[50vh] flex flex-col items-center justify-center text-center">
-<div className="w-20 h-20 bg-white shadow-sm border border-blue-100 rounded-2xl flex items-center justify-center mb-6">
-<Icon name="FileText" size={32} className="text-blue-500" />
-</div>
-<h2 className="text-xl font-bold text-blue-950 mb-2">No Financial Data Loaded</h2>
-<p className="text-sm text-slate-500 mb-8 max-w-sm">Please import a General Ledger file from the integration hub to generate insights.</p>
-<button onClick={() => setActiveTab('import')} className="bg-blue-700 text-white px-6 py-3 rounded-xl text-sm font-bold shadow-lg shadow-blue-700/30 hover:bg-blue-800 transition-colors">
-Go to Import
-</button>
-</div>
-)}
-</div>
-</main>
-</div>
-);
-};
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
-</script>
-</body>
-</html>
