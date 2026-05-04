@@ -3,36 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enterprise Financial Dashboard - FinPulse Pro</title>
+<title>FinPulse - Enterprise Financial Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/recharts@2.1.9/umd/Recharts.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-
 <style>
     body { font-family: 'Inter', sans-serif; background-color: #f4f7fb; }
     .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    table { border-spacing: 0; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     @media print {
         body { background: white !important; }
         .no-print { display: none !important; }
         .no-print-padding { padding: 0 !important; }
         .border, .shadow-sm { box-shadow: none !important; border: none !important; border-bottom: 1px solid #f1f5f9 !important; }
     }
-    .modal-overlay { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
-    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-    .modal-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
 </style>
 </head>
 <body class="text-slate-900 overflow-hidden">
@@ -40,68 +33,40 @@
 
 <script type="text/babel">
 const { useState, useMemo, useEffect } = React;
-const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ComposedChart, AreaChart, Area, Radar, RadarChart, PolarGrid, PolarAngleAxis, Legend } = window.Recharts;
+const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } = window.Recharts;
 
-// --- 1. Icon Component ---
+// --- Icon Wrapper ---
 const Icon = ({ name, size = 16, className = "" }) => {
     const faMap = {
         Upload: 'fa-upload', FileText: 'fa-file-lines', BarChart3: 'fa-chart-column',
         TrendingUp: 'fa-arrow-trend-up', TrendingDown: 'fa-arrow-trend-down',
         Loader2: 'fa-circle-notch fa-spin', Printer: 'fa-print', Database: 'fa-database',
         CheckCircle2: 'fa-circle-check', FileSpreadsheet: 'fa-file-excel',
-        PieChartIcon: 'fa-chart-pie', DollarSign: 'fa-dollar-sign', ArrowUpRight: 'fa-arrow-up', ArrowDownRight: 'fa-arrow-down',
-        Layers: 'fa-layer-group', LineMsg: 'fa-line', PaperPlane: 'fa-paper-plane', ScaleBalanced: 'fa-scale-balanced',
-        AlertCircle: 'fa-circle-exclamation', ListCheck: 'fa-list-check', Pen: 'fa-pen', Check: 'fa-check',
-        Xmark: 'fa-xmark', Trash: 'fa-trash', Target: 'fa-bullseye'
+        PieChartIcon: 'fa-chart-pie', DollarSign: 'fa-dollar-sign',
+        Layers: 'fa-layer-group', ListCheck: 'fa-list-check', Trash: 'fa-trash'
     };
-    const isBrand = name === 'LineMsg' ? 'fa-brands' : 'fa-solid';
-    return <i className={`${isBrand} ${faMap[name] || 'fa-circle'} ${className}`} style={{ fontSize: size }}></i>;
+    return <i className={`fa-solid ${faMap[name] || 'fa-star'} ${className}`} style={{ fontSize: size }}></i>;
 };
 
-// --- 2. Global Utils ---
+// --- Formatting Utils ---
 const MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 const COLORS = ['#1e3a8a', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd'];
 
 const formatCurrency = (val) => {
-    if (!val || isNaN(val)) return '-';
+    if (val === undefined || val === null || isNaN(val)) return '-';
     if (Math.abs(val) < 0.01) return '-';
     const formatted = Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     return val < 0 ? `(${formatted})` : formatted;
 };
 
 const formatCompact = (val) => {
-    if (!val || isNaN(val)) return '0';
+    if (!val || isNaN(val)) return '฿ 0';
     if (Math.abs(val) >= 1000000) return `฿ ${(val / 1000000).toFixed(2)}M`;
     if (Math.abs(val) >= 1000) return `฿ ${(val / 1000).toFixed(0)}k`;
-    return `฿ ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `฿ ${val.toLocaleString()}`;
 };
 
-const parseDateToYearMonth = (dateVal) => {
-    if (!dateVal) return { year: -1, month: -1 };
-    if (typeof dateVal === 'number') {
-        const date = new Date((dateVal - (25567 + 1)) * 86400 * 1000);
-        return { year: date.getFullYear(), month: date.getMonth() };
-    }
-    const strDate = dateVal.toString().trim();
-    if (strDate.includes('/')) {
-        const parts = strDate.split('/');
-        if (parts[0].length === 4) return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) - 1 };
-        return { year: parseInt(parts[2], 10), month: parseInt(parts[1], 10) - 1 };
-    } else if (strDate.includes('-')) {
-        const parts = strDate.split('-');
-        if (parts[0].length === 4) return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) - 1 };
-        return { year: parseInt(parts[2], 10), month: parseInt(parts[1], 10) - 1 };
-    }
-    return { year: -1, month: -1 };
-};
-
-const cleanNumber = (val) => {
-    if (!val) return 0;
-    if (typeof val === 'number') return val;
-    return parseFloat(val.toString().replace(/,/g, '')) || 0;
-};
-
-// --- 3. Accounting Engine ---
+// --- Accounting Engine ---
 const useFinancialEngine = (csvDataRows, selectedYear) => {
     const [availableYears, setAvailableYears] = useState([]);
     const [parsedTx, setParsedTx] = useState([]);
@@ -111,24 +76,21 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
 
     useEffect(() => {
         if (!csvDataRows || csvDataRows.length === 0) return;
-        const isExpress = csvDataRows.slice(0, 15).some(r => r[0] && String(r[0]).replace(/\s/g, '').includes('รายงานแยกประเภท'));
-        const closingKeywords = ["ปิดบัญชี", "ยอดยกไป", "closing", "โอนปิด", "โอนกำไร", "ปิดยอด", "year end", "ปิดงบ", "โอนบัญชี"];
-        
+        const closingKeywords = ["ปิดบัญชี", "ยอดยกไป", "closing", "โอนปิด", "โอนกำไร", "ปีเก่า"];
         let headerRowIdx = -1;
         let colMap = {};
+        
         for(let i=0; i<Math.min(20, csvDataRows.length); i++) {
-            const row = csvDataRows[i];
-            if(!row) continue;
-            const rowStr = row.map(c => String(c||'').toLowerCase()).join('|');
+            const rowStr = csvDataRows[i]?.map(c => String(c||'').toLowerCase()).join('|') || "";
             if((rowStr.includes('รหัสบัญชี') || rowStr.includes('account code')) && (rowStr.includes('เดบิต') || rowStr.includes('debit'))) {
                 headerRowIdx = i;
-                row.forEach((col, idx) => {
+                csvDataRows[i].forEach((col, idx) => {
                     const c = String(col||'').toLowerCase();
-                    if(c.includes('รหัสบัญชี') || c.includes('account code')) colMap.code = idx;
-                    else if(c.includes('ชื่อบัญชี') || c.includes('account name')) colMap.name = idx;
+                    if(c.includes('รหัสบัญชี')) colMap.code = idx;
+                    else if(c.includes('ชื่อบัญชี')) colMap.name = idx;
                     else if(c === 'วันที่' || c === 'date') colMap.date = idx;
-                    else if(c === 'เดบิต' || c === 'debit' || c.includes('debit')) colMap.debit = idx;
-                    else if(c === 'เครดิต' || c === 'credit' || c.includes('credit')) colMap.credit = idx;
+                    else if(c.includes('เดบิต')) colMap.debit = idx;
+                    else if(c.includes('เครดิต')) colMap.credit = idx;
                 });
                 break;
             }
@@ -138,417 +100,155 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
         let yearsSet = new Set();
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
-        if (isExpress) {
-            let curCode = ""; let curName = ""; let seenAccounts = new Set(); 
-            csvDataRows.forEach(row => {
-                if (!row || !row[0]) return;
-                const col0 = String(row[0]).trim();
-                if (col0.includes('บริษัท') || col0.includes('รายงาน') || col0.includes('วันที่จาก') || col0.includes('เลขที่บัญชี') || col0.includes('พิมพ์โดย') || col0 === 'วันที่' || col0 === 'รวม') return; 
+        // Simple Parser Logic
+        csvDataRows.forEach((row, idx) => {
+            if (idx <= headerRowIdx || !row) return;
+            const code = String(row[colMap.code] || "").trim();
+            if (!code || isNaN(code.charAt(0))) return;
 
-                if (/^[a-zA-Z0-9-\.]{4,}$/.test(col0) && !col0.includes('/') && !col0.match(/[ก-๙]/)) {
-                    curCode = col0; curName = String(row[2] || "").trim();
-                    if (!seenAccounts.has(curCode)) {
-                        seenAccounts.add(curCode);
-                        let openBal = parseFloat(String(row[8] || "").replace(/,/g, ''));
-                        if (isNaN(openBal) && row.length > 0) openBal = parseFloat(String(row[row.length - 1] || "").replace(/,/g, ''));
-                        if (!isNaN(openBal) && openBal !== 0) {
-                            flatTransactions.push({ id: generateId(), date: 'ยอดยกมา', code: curCode, name: curName, desc: 'ยอดยกมา', year: -1, month: -1, isOpening: true, rawDebit: openBal>0?openBal:0, rawCredit: openBal<0?Math.abs(openBal):0 });
-                        }
-                    }
-                } else if (col0.includes('/') && col0.split('/').length >= 3) {
-                    const desc = String(row[3] || "").trim();
-                    if (desc.includes('ยอดยกมา') || closingKeywords.some(kw => desc.toLowerCase().includes(kw))) return; 
-                    const { year, month } = parseDateToYearMonth(col0);
-                    if (year !== -1) yearsSet.add(year);
-                    flatTransactions.push({ id: generateId(), date: col0, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: cleanNumber(row[5]), rawCredit: cleanNumber(row[6]) });
-                }
-            });
-        } else if (headerRowIdx !== -1 && colMap.code !== undefined && colMap.debit !== undefined) {
-            let seenAccountsSmart = new Set();
-            for(let i = headerRowIdx + 1; i < csvDataRows.length; i++) {
-                const row = csvDataRows[i];
-                if (!row || row.length === 0) continue;
-                let curCode = String(row[colMap.code] || "").trim();
-                if (!curCode) continue;
+            const dateStr = String(row[colMap.date] || "");
+            const rowStr = row.join("|");
+            if (closingKeywords.some(kw => rowStr.includes(kw))) return;
 
-                let curName = colMap.name !== undefined ? String(row[colMap.name] || "").trim() : "";
-                let dateStr = colMap.date !== undefined ? String(row[colMap.date] || "").trim() : "";
-                let desc = String(row[5] || "").trim(); 
-                let debit = cleanNumber(row[colMap.debit]);
-                let credit = cleanNumber(row[colMap.credit]);
-
-                const rowString = row.join("|");
-                if (closingKeywords.some(kw => rowString.toLowerCase().includes(kw))) continue; 
-
-                if (rowString.includes("ยอดยกมา") || (!dateStr && rowString.includes("ยอดยกมา"))) {
-                    if (!seenAccountsSmart.has(curCode)) {
-                        seenAccountsSmart.add(curCode);
-                        flatTransactions.push({ id: generateId(), date: 'ยอดยกมา', code: curCode, name: curName, desc: desc || 'ยอดยกมา', year: -1, month: -1, isOpening: true, rawDebit: debit, rawCredit: credit });
-                    }
-                } else if (dateStr && dateStr.includes('/')) {
-                    const { year, month } = parseDateToYearMonth(dateStr);
-                    if (year !== -1) yearsSet.add(year);
-                    flatTransactions.push({ id: generateId(), date: dateStr, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: debit, rawCredit: credit });
-                }
+            let year = -1, month = -1;
+            if (dateStr.includes('/')) {
+                const parts = dateStr.split('/');
+                year = parseInt(parts[2]);
+                month = parseInt(parts[1]) - 1;
+                if (year > 2500) year -= 543;
             }
-        } else {
-            let curCode = ""; let curName = ""; let seenAccountsStandard = new Set();
-            csvDataRows.forEach(row => {
-                if (!row || row.length === 0) return;
-                const col0 = (row[0] || "").toString().trim();
-                const accountMatch = col0.match(/^(\d+)\s*\((.*)\)/);
-                if (accountMatch) { curCode = accountMatch[1]; curName = accountMatch[2]; }
-                if (!curCode) return;
-                
-                const rowString = row.join("|");
-                const desc = String(row[5] || "").trim();
-                if (closingKeywords.some(kw => rowString.toLowerCase().includes(kw)) || rowString.includes("ลำดับที่")) return;
 
-                const debit = cleanNumber(row[6]);
-                const credit = cleanNumber(row[7]);
-
-                if (rowString.includes("ยอดยกมา")) {
-                    if (!seenAccountsStandard.has(curCode)) {
-                        seenAccountsStandard.add(curCode);
-                        flatTransactions.push({ id: generateId(), date: 'ยอดยกมา', code: curCode, name: curName, desc: desc || 'ยอดยกมา', year: -1, month: -1, isOpening: true, rawDebit: debit, rawCredit: credit });
-                    }
-                } else {
-                    const dateStr = String(row[2]||"").trim();
-                    if (!dateStr || !dateStr.includes('/')) return; 
-                    const { year, month } = parseDateToYearMonth(dateStr);
-                    if (year !== -1) yearsSet.add(year);
-                    flatTransactions.push({ id: generateId(), date: dateStr, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: debit, rawCredit: credit });
-                }
-            });
-        }
+            if (year !== -1) {
+                yearsSet.add(year);
+                flatTransactions.push({
+                    id: generateId(), date: dateStr, code, name: String(row[colMap.name] || ""),
+                    year, month, rawDebit: parseFloat(String(row[colMap.debit]||'').replace(/,/g,'')) || 0,
+                    rawCredit: parseFloat(String(row[colMap.credit]||'').replace(/,/g,'')) || 0
+                });
+            }
+        });
 
         setParsedTx(flatTransactions);
         setAvailableYears(Array.from(yearsSet).sort((a,b)=>b-a));
     }, [csvDataRows]);
 
     useEffect(() => {
-        if (!parsedTx || parsedTx.length === 0) return;
-        const targetYear = selectedYear || (availableYears.length > 0 ? availableYears[0] : new Date().getFullYear());
+        if (parsedTx.length === 0) return;
+        const targetYear = selectedYear ? parseInt(selectedYear) : availableYears[0];
         const accountMap = {};
-        
+
         parsedTx.forEach(tx => {
-            const code = String(tx.code || '').trim();
-            if (!code) return;
-            if (!accountMap[code]) accountMap[code] = { id: code, name: tx.name, openingBalance: 0, monthlyChange: Array(12).fill(0) };
+            if (tx.year !== targetYear) return;
+            const code = tx.code;
+            if (!accountMap[code]) accountMap[code] = { id: code, name: tx.name, monthly: Array(12).fill(0) };
             
-            let isDebitNature = code.startsWith('1') || code.startsWith('5');
-            let debit = parseFloat(tx.rawDebit) || 0;
-            let credit = parseFloat(tx.rawCredit) || 0;
-            let netAmt = isDebitNature ? (debit - credit) : (credit - debit);
-
-            if (tx.isOpening) {
-                accountMap[code].openingBalance += netAmt;
-            } else {
-                const isBS = code.startsWith('1') || code.startsWith('2') || code.startsWith('3');
-                if (tx.year < targetYear && isBS) {
-                    accountMap[code].openingBalance += netAmt;
-                } else if (tx.year === targetYear && tx.month >= 0 && tx.month < 12) {
-                    accountMap[code].monthlyChange[tx.month] += netAmt;
-                }
-            }
+            const isDebitNature = code.startsWith('1') || code.startsWith('5');
+            const net = isDebitNature ? (tx.rawDebit - tx.rawCredit) : (tx.rawCredit - tx.rawDebit);
+            if (tx.month >= 0 && tx.month < 12) accountMap[code].monthly[tx.month] += net;
         });
 
-        const categories = { revenue: [], cogs: [], opex: [], assets_current: [], liabilities_current: [], equity: [] };
+        const cats = { revenue: [], cogs: [], opex: [], assets_current: [], liabilities_current: [], equity: [] };
         Object.values(accountMap).forEach(acc => {
-            const code = acc.id;
-            const isBS = code.startsWith('1') || code.startsWith('2') || code.startsWith('3');
-            let currentBalance = acc.openingBalance;
-            const processedMonthly = acc.monthlyChange.map(change => {
-                if (isBS) { currentBalance += change; return currentBalance; }
-                return change;
-            });
-            const finalAcc = { ...acc, monthly: processedMonthly };
-            if (code.startsWith('4')) categories.revenue.push(finalAcc);
-            else if (code.startsWith('51')) categories.cogs.push(finalAcc);
-            else if (code.startsWith('5')) categories.opex.push(finalAcc);
-            else if (code.startsWith('1')) categories.assets_current.push(finalAcc);
-            else if (code.startsWith('2')) categories.liabilities_current.push(finalAcc);
-            else if (code.startsWith('3')) categories.equity.push(finalAcc);
+            if (acc.id.startsWith('4')) cats.revenue.push(acc);
+            else if (acc.id.startsWith('51')) cats.cogs.push(acc);
+            else if (acc.id.startsWith('5')) cats.opex.push(acc);
+            else if (acc.id.startsWith('1')) cats.assets_current.push(acc);
+            else if (acc.id.startsWith('2')) cats.liabilities_current.push(acc);
+            else if (acc.id.startsWith('3')) cats.equity.push(acc);
         });
-        setFinancialData(categories);
+        setFinancialData(cats);
     }, [parsedTx, selectedYear, availableYears]);
 
     const reportData = useMemo(() => {
         const sumM = (arr) => {
             const res = Array(12).fill(0);
-            if (!arr || arr.length === 0) return res;
-            arr.forEach(item => { if (item.monthly) item.monthly.forEach((v, i) => { if (i < 12) res[i] += v; }); });
+            arr.forEach(item => item.monthly.forEach((v, i) => res[i] += v));
             return res;
         };
         const totalRev = sumM(financialData.revenue);
-        const totalCogs = sumM(financialData.cogs);
-        const totalOpex = sumM(financialData.opex);
-        const totalCombinedExp = totalCogs.map((c, i) => c + totalOpex[i]);
-        const grossProfit = totalRev.map((r, i) => r - totalCogs[i]);
-        const netIncomeMonthly = grossProfit.map((g, i) => g - totalOpex[i]);
-        let runningNetProfit = 0;
-        const netIncomeCumulative = netIncomeMonthly.map(val => {
-            runningNetProfit += val;
-            return runningNetProfit;
-        });
-        const totalAssets = sumM(financialData.assets_current);
-        const totalLiabilities = sumM(financialData.liabilities_current);
-        const totalEquityLedger = sumM(financialData.equity);
-        const totalEquityReal = totalEquityLedger.map((e, i) => e + netIncomeCumulative[i]);
-        const totalLiabEquity = totalLiabilities.map((l, i) => l + totalEquityReal[i]);
-        const yearlyRev = totalRev.reduce((a, b) => a + b, 0);
-        const yearlyNet = netIncomeMonthly.reduce((a, b) => a + b, 0);
-        const netMargin = yearlyRev ? (yearlyNet / yearlyRev) * 100 : 0;
-        
-        let tbAccounts = [];
-        const processTB = (arr) => {
-            arr.forEach(acc => {
-                const isBS = acc.id.startsWith('1') || acc.id.startsWith('2') || acc.id.startsWith('3');
-                const isDebitNature = acc.id.startsWith('1') || acc.id.startsWith('5');
-                const balance = isBS ? (acc.monthly[11] || 0) : acc.monthly.reduce((a,b)=>a+b,0);
-                if (Math.abs(balance) > 0.01) {
-                    let dr = 0, cr = 0;
-                    if (isDebitNature) {
-                        if (balance > 0) dr = balance; else cr = Math.abs(balance);
-                    } else {
-                        if (balance > 0) cr = balance; else dr = Math.abs(balance);
-                    }
-                    tbAccounts.push({ id: acc.id, name: acc.name, dr, cr });
-                }
-            });
-        }
-        processTB([...financialData.assets_current, ...financialData.liabilities_current, ...financialData.equity, ...financialData.revenue, ...financialData.cogs, ...financialData.opex]);
-        tbAccounts.sort((a,b) => a.id.localeCompare(b.id));
+        const totalExp = sumM([...financialData.cogs, ...financialData.opex]);
+        const netIncomeMonthly = totalRev.map((r, i) => r - totalExp[i]);
+        const yearlyRev = totalRev.reduce((a,b)=>a+b, 0);
+        const yearlyNet = netIncomeMonthly.reduce((a,b)=>a+b, 0);
 
-        return {
-            totalRev, totalCogs, totalOpex, totalCombinedExp, grossProfit,
-            netIncomeMonthly, netIncomeCumulative,
-            totalAssets, totalLiabilities, totalEquityLedger, totalEquityReal, totalLiabEquity,
-            yearlyRev, yearlyNet, netMargin, tbAccounts
-        };
+        let tb = [];
+        [...financialData.assets_current, ...financialData.liabilities_current, ...financialData.equity, ...financialData.revenue, ...financialData.opex].forEach(acc => {
+            const bal = acc.monthly.reduce((a,b)=>a+b,0);
+            if (Math.abs(bal) > 0.01) {
+                const isDr = acc.id.startsWith('1') || acc.id.startsWith('5');
+                tb.push({ id: acc.id, name: acc.name, dr: isDr ? (bal > 0 ? bal : 0) : (bal < 0 ? -bal : 0), cr: !isDr ? (bal > 0 ? bal : 0) : (bal < 0 ? -bal : 0) });
+            }
+        });
+
+        return { totalRev, totalExp, netIncomeMonthly, yearlyRev, yearlyNet, tb };
     }, [financialData]);
 
-    const updateTransaction = (id, newFields) => setParsedTx(prev => prev.map(t => t.id === id ? { ...t, ...newFields } : t));
-    const deleteTransaction = (id) => setParsedTx(prev => prev.filter(t => t.id !== id));
-
-    return { financialData, reportData, availableYears, parsedTx, updateTransaction, deleteTransaction };
+    return { financialData, reportData, availableYears, parsedTx };
 };
 
-// --- 4. Sub Components ---
-const KPICard = ({ title, value, iconName, trend, trendValue, iconBgClass, iconColorClass }) => (
-    <div className="bg-white rounded-xl p-6 border-l-4 border-[#1e3a8a] shadow-sm flex flex-col justify-between h-36 hover:shadow-md transition-shadow">
-        <div className="flex justify-between items-start">
-            <div className={`${iconBgClass} ${iconColorClass} p-2 rounded-lg flex items-center justify-center w-10 h-10`}>
-                <Icon name={iconName} size={18} />
-            </div>
-            {trend && (
-                <span className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md ${trend === 'up' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                    {trend === 'up' ? <Icon name="TrendingUp" size={10} /> : <Icon name="TrendingDown" size={10} />}
-                    {trendValue}
-                </span>
-            )}
-        </div>
-        <div className="mt-4">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</p>
-            <h3 className="text-2xl lg:text-3xl font-black text-[#0f172a] tracking-tight truncate">{value}</h3>
-        </div>
-    </div>
-);
-
-const StatementRow = ({ item, isSub = false, isProfitRow = false, viewType }) => {
-    const isBS = viewType === 'bs';
-    const total = isBS ? (item.monthly?.[11] || 0) : (item.monthly?.reduce((a, b) => a + b, 0) || 0);
-    let labelClass = "text-slate-800 font-semibold";
-    if (isSub) labelClass = "text-slate-500 pl-6";
-    if (isProfitRow) labelClass = "text-blue-700 font-bold pl-6";
-    return (
-        <tr className="hover:bg-blue-50/50 border-b border-slate-100 transition-colors group">
-            <td className="sticky left-0 bg-white group-hover:bg-blue-50/50 px-4 py-3 border-r border-slate-100 z-10 w-72 truncate text-sm" title={item.name}>
-                <div className={labelClass}>
-                    {item.name} {!isProfitRow && <span className="text-[10px] text-slate-400 ml-2 font-mono">{item.id}</span>}
-                </div>
-            </td>
-            {(item.monthly || Array(12).fill(0)).map((v, i) => (
-                <td key={i} className={`px-2 py-3 text-right text-sm font-mono whitespace-nowrap ${v < 0 ? 'text-rose-600' : 'text-slate-600'}`}>
-                    {formatCurrency(v)}
-                </td>
-            ))}
-            <td className={`px-4 py-3 text-right text-sm font-bold bg-slate-50 group-hover:bg-blue-100/30 font-mono border-l border-slate-100 whitespace-nowrap ${total < 0 ? 'text-rose-600' : 'text-blue-950'}`}>
-                {formatCurrency(total)}
-            </td>
-        </tr>
-    );
-};
-
-const StatementTotalRow = ({ label, values, viewType, isGrandTotal = false }) => {
-    const isBS = viewType === 'bs';
-    const data = Array.isArray(values) ? values : Array(12).fill(0);
-    const total = isBS ? (data[11] || 0) : data.reduce((a, b) => a + b, 0);
-    const bgClass = isGrandTotal ? 'bg-[#0f172a] text-white' : 'bg-blue-50 text-blue-900';
-    const borderClass = isGrandTotal ? '' : 'border-y border-blue-100';
-    return (
-        <tr className={`${bgClass} ${borderClass}`}>
-            <td className={`sticky left-0 ${bgClass} px-4 py-4 z-10 text-sm font-bold tracking-wide border-r ${isGrandTotal ? 'border-slate-800' : 'border-blue-100'}`}>{label}</td>
-            {data.map((v, i) => (
-                <td key={i} className={`px-2 py-4 text-right text-sm font-mono font-medium whitespace-nowrap ${isGrandTotal ? 'text-slate-300' : 'text-blue-800'}`}>{formatCurrency(v)}</td>
-            ))}
-            <td className={`px-4 py-4 text-right text-[15px] font-black font-mono whitespace-nowrap border-l ${isGrandTotal ? 'border-slate-800 text-white' : 'border-blue-200 text-blue-950'}`}>{formatCurrency(total)}</td>
-        </tr>
-    );
-};
-
-// --- 5. The Main App ---
+// --- Main Application ---
 const App = () => {
     const [activeTab, setActiveTab] = useState('import');
-    const [statementView, setStatementView] = useState('tb'); 
     const [isImporting, setIsImporting] = useState(false);
     const [rawCsvData, setRawCsvData] = useState(null);
     const [selectedYear, setSelectedYear] = useState("");
-    const [searchVerify, setSearchVerify] = useState("");
+    const { financialData, reportData, availableYears, parsedTx } = useFinancialEngine(rawCsvData, selectedYear);
 
-    const [query, setQuery] = useState("");
-    const [customChart, setCustomChart] = useState(null);
-    const [drillDownData, setDrillDownData] = useState({ open: false, title: '', rows: [] });
-    
-    const [isSendingLine, setIsSendingLine] = useState(false);
-    const [showNotification, setShowNotification] = useState(false);
-    const [notificationMsg, setNotificationMsg] = useState("");
-    const [notificationError, setNotificationError] = useState(false);
+    // ✅ กู้คืนระบบ EXPORT EXCEL (พร้อมใส่หัวตารางสี)
+    const handleExportExcel = () => {
+        if (!rawCsvData) return;
+        const wb = XLSX.utils.book_new();
+        const styles = {
+            header: { fill: { fgColor: { rgb: "1E3A8A" } }, font: { color: { rgb: "FFFFFF" }, bold: true }, alignment: { horizontal: "center" } },
+            cell: { font: { sz: 10 } },
+            number: { alignment: { horizontal: "right" }, numFmt: "#,##0.00" }
+        };
 
-    const { financialData, reportData, availableYears, parsedTx, deleteTransaction } = useFinancialEngine(rawCsvData, selectedYear ? parseInt(selectedYear) : null);
-    const importSuccess = rawCsvData !== null;
-
-    useEffect(() => {
-        if (availableYears.length > 0 && !selectedYear) setSelectedYear(availableYears[0].toString());
-    }, [availableYears]);
-
-    // AI Command Input
-    const handleSmartQuery = (e) => {
-        const val = e.target.value.toLowerCase();
-        setQuery(val);
-        if (!val) { setCustomChart(null); return; }
-
-        if (val.includes("vs") || val.includes("เทียบ") || val.includes("สินทรัพย์") || val.includes("หนี้สิน")) {
-            setCustomChart({
-                type: 'bar', title: 'Asset vs Liability Analysis',
-                data: MONTHS_SHORT.map((m, i) => ({ name: m, Asset: reportData.totalAssets[i] || 0, Liability: reportData.totalLiabilities[i] || 0 })),
-                keys: [{ k: 'Asset', c: '#1e3a8a' }, { k: 'Liability', c: '#ef4444' }]
-            });
-        } else if (val.includes("สะสม") || val.includes("profit") || val.includes("กำไร")) {
-            setCustomChart({
-                type: 'area', title: 'Accumulated Profit Trend',
-                data: MONTHS_SHORT.map((m, i) => ({ name: m, Value: reportData.netIncomeCumulative[i] || 0 })),
-                keys: [{ k: 'Value', c: '#10b981' }]
-            });
-        } else {
-            setCustomChart(null);
+        // 1. Profit & Loss Sheet
+        const pnlRows = [["Account Code", "Account Name", ...MONTHS_SHORT, "Total"]];
+        financialData.revenue.forEach(acc => pnlRows.push([acc.id, acc.name, ...acc.monthly, acc.monthly.reduce((a,b)=>a+b,0)]));
+        const wsPnl = XLSX.utils.aoa_to_sheet(pnlRows);
+        // Apply Header Style
+        for (let i=0; i<15; i++) {
+            const cellRef = XLSX.utils.encode_cell({r:0, c:i});
+            if (wsPnl[cellRef]) wsPnl[cellRef].s = styles.header;
         }
+        XLSX.utils.book_append_sheet(wb, wsPnl, "Profit and Loss");
+
+        // 2. Trial Balance Sheet
+        const tbRows = [["Code", "Name", "Debit", "Credit"]];
+        reportData.tb.forEach(item => tbRows.push([item.id, item.name, item.dr, item.cr]));
+        const wsTb = XLSX.utils.aoa_to_sheet(tbRows);
+        for (let i=0; i<4; i++) {
+            const cellRef = XLSX.utils.encode_cell({r:0, c:i});
+            if (wsTb[cellRef]) wsTb[cellRef].s = styles.header;
+        }
+        XLSX.utils.book_append_sheet(wb, wsTb, "Trial Balance");
+
+        XLSX.writeFile(wb, `Financial_Report_${selectedYear || '2026'}.xlsx`);
     };
 
-    // Analytics Data
-    const analyticsData = useMemo(() => MONTHS_SHORT.map((m, i) => {
-        const actualRev = reportData.totalRev[i] || 0;
-        const budgetRev = actualRev === 0 ? 0 : actualRev * 1.1; 
-        const actualExp = reportData.totalCombinedExp[i] || 0;
-        return { name: m, ActualRev: actualRev, BudgetRev: budgetRev, ActualExp: actualExp, monthIdx: i };
-    }), [reportData]);
-
-    const healthData = useMemo(() => {
-        if (!importSuccess || !reportData) return [];
-        const lastIdx = 11;
-        const assets = reportData.totalAssets[lastIdx] || 0;
-        const liab = reportData.totalLiabilities[lastIdx] || 1; 
-        return [
-            { subject: 'Liquidity', A: Math.min((assets / liab) * 35, 100) }, 
-            { subject: 'Profitability', A: Math.min(reportData.netMargin * 3, 100) },
-            { subject: 'Growth', A: 75 },
-            { subject: 'Efficiency', A: 85 },
-            { subject: 'Solvency', A: Math.min((reportData.totalEquityReal[lastIdx] / assets) * 100 || 0, 100) }
-        ];
-    }, [reportData, importSuccess]);
-
-    const expensePieData = useMemo(() => {
-        return financialData.opex.map(exp => ({
-            name: exp.name,
-            value: exp.monthly.reduce((a,b)=>a+b,0)
-        })).filter(e => e.value > 0).sort((a,b) => b.value - a.value).slice(0, 5);
-    }, [financialData.opex]);
-
-    // Modal
-    const handleChartClick = (data) => {
-        if (!data || !data.activePayload) return;
-        const payload = data.activePayload[0].payload;
-        const monthIdx = payload.monthIdx;
-        const monthTx = parsedTx.filter(tx => tx.month === monthIdx && tx.code.startsWith('4'));
-        
-        setDrillDownData({
-            open: true,
-            title: `Revenue Details - ${MONTHS_SHORT[monthIdx]}`,
-            rows: monthTx.slice(0, 50) 
-        });
-    };
-
-    // Actions
     const handleFileUpload = (e) => {
         const file = e.target.files[0];
         if (!file) return;
         setIsImporting(true);
         const reader = new FileReader();
         reader.onload = (evt) => {
-            try {
-                let data = [];
-                const arrayBuffer = evt.target.result;
-                if (file.name.toLowerCase().endsWith('.csv')) {
-                    const decoder = new TextDecoder('windows-874'); 
-                    const csvText = decoder.decode(arrayBuffer);
-                    const wb = XLSX.read(csvText, { type: 'string' });
-                    data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-                } else {
-                    const wb = XLSX.read(arrayBuffer, { type: 'array' });
-                    data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
-                }
-                setRawCsvData(data);
-                if (data.length <= 1) throw new Error("ไฟล์ว่างเปล่า");
-                setTimeout(() => { setIsImporting(false); setActiveTab('dashboard'); }, 500);
-            } catch (err) {
-                console.error(err);
-                setIsImporting(false);
-                setNotificationError(true);
-                setNotificationMsg("❌ ไม่สามารถอ่านไฟล์ได้ กรุณาตรวจสอบว่าเป็นไฟล์ GL หรือเข้ารหัสถูกต้องหรือไม่");
-                setShowNotification(true);
-                setTimeout(() => setShowNotification(false), 5000);
-            }
+            const data = XLSX.read(evt.target.result, { type: 'array' });
+            const sheet = data.Sheets[data.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            setRawCsvData(rows);
+            setTimeout(() => { setIsImporting(false); setActiveTab('dashboard'); }, 500);
         };
         reader.readAsArrayBuffer(file);
     };
 
-    const handleExportExcel = () => {
-        if (typeof XLSX === 'undefined') return;
-        const wb = XLSX.utils.book_new();
-        // Export Logic Placeholder for simplicity
-        XLSX.writeFile(wb, `Financial_Report_${selectedYear}.xlsx`);
-    };
-
-    const handleSendToLine = async () => {
-        setNotificationMsg("✅ ส่งคำสั่งเข้า LINE เรียบร้อยแล้ว (Demo)");
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 3000);
-    };
-
     return (
-        <div className="flex h-screen bg-[#f4f7fb]">
-            {/* Notification */}
-            {showNotification && (
-                <div className={`fixed top-24 right-10 z-[200] text-white px-6 py-4 rounded-xl shadow-xl flex items-start gap-3 modal-fade-in font-bold max-w-sm ${notificationError ? 'bg-rose-600' : 'bg-[#00B900]'}`}>
-                    <Icon name={notificationError ? "AlertCircle" : "CheckCircle2"} size={18} className="mt-0.5 shrink-0" />
-                    <span className="text-sm leading-relaxed">{notificationMsg}</span>
-                </div>
-            )}
-
+        <div className="flex h-screen overflow-hidden">
             {/* Sidebar */}
             <aside className="w-64 bg-[#1e2235] flex flex-col z-50 shadow-xl shrink-0 no-print">
                 <div className="h-20 flex items-center px-6 border-b border-slate-700/50">
-                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white mr-3 shadow-lg">
+                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white mr-3">
                         <Icon name="Layers" size={16} />
                     </div>
                     <h1 className="text-xl font-bold tracking-tight text-white">Fin<span className="text-blue-400">Pulse</span></h1>
@@ -556,314 +256,120 @@ const App = () => {
                 <div className="flex-1 py-6 px-4 space-y-2">
                     <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Finance Engine</p>
                     {[
-                        { id: 'import', iconName: 'Upload', label: 'Data Import' },
-                        { id: 'verify', iconName: 'ListCheck', label: 'Data Re-check' },
-                        { id: 'dashboard', iconName: 'BarChart3', label: 'Performance Analytics' },
-                        { id: 'statements', iconName: 'FileText', label: 'Ledger Statements' },
+                        { id: 'import', icon: 'Upload', label: 'Data Import' },
+                        { id: 'dashboard', icon: 'BarChart3', label: 'Performance Analytics' },
+                        { id: 'statements', icon: 'FileText', label: 'Ledger Statements' },
                     ].map(item => (
                         <button key={item.id} onClick={() => setActiveTab(item.id)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-semibold ${
-                                activeTab === item.id ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                            }`}>
-                            <Icon name={item.iconName} size={16} className={activeTab === item.id ? 'text-white' : 'text-slate-400'} />
+                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-semibold ${activeTab === item.id ? 'bg-[#2563eb] text-white shadow-md' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                            <Icon name={item.icon} size={16} />
                             <span>{item.label}</span>
                         </button>
                     ))}
                 </div>
-                <div className="p-6 border-t border-slate-700/50">
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 bg-blue-800 rounded-full flex items-center justify-center text-xs font-bold text-white">AM</div>
-                        <div className="text-white">
-                            <p className="text-sm font-bold truncate w-32">Amper Co., Ltd.</p>
-                            <p className="text-[10px] text-slate-400 uppercase">Pro Workspace</p>
-                        </div>
-                    </div>
+                <div className="p-6 border-t border-slate-700/50 text-white flex items-center gap-3">
+                    <div className="w-9 h-9 bg-blue-800 rounded-full flex items-center justify-center font-bold">AM</div>
+                    <div><p className="text-sm font-bold">Amper Co., Ltd.</p><p className="text-[10px] text-slate-400">Active Workspace</p></div>
                 </div>
             </aside>
 
-            {/* Main Content Area */}
-            <main className="flex-1 flex flex-col overflow-hidden relative">
-                {/* Header */}
-                <header className="h-20 flex items-center justify-between px-8 bg-[#f4f7fb] shrink-0 no-print">
+            {/* Main Content */}
+            <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#f4f7fb]">
+                <header className="h-20 flex items-center justify-between px-8 shrink-0 no-print">
                     <div className="flex items-center gap-4">
-                        <h2 className="font-bold text-xl text-[#0f172a] tracking-tight">
-                            {activeTab === 'import' && 'Integration Hub'}
-                            {activeTab === 'verify' && 'Data Verification'}
-                            {activeTab === 'dashboard' && 'Financial Overview'}
-                            {activeTab === 'statements' && 'General Ledger Reports'}
-                        </h2>
-                        {availableYears.length > 0 && (
-                            <div className="flex items-center bg-white border border-slate-200 rounded-full h-8 px-1 shadow-sm">
-                                <span className="px-2 py-1 text-[10px] font-bold text-blue-600 border-r border-slate-100">FY</span>
-                                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent text-slate-700 px-2 text-xs font-bold focus:outline-none cursor-pointer">
-                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-                                </select>
-                            </div>
-                        )}
+                        <h2 className="font-bold text-xl text-[#0f172a] tracking-tight">Financial Overview</h2>
+                        <div className="flex items-center bg-white border border-slate-200 rounded-full h-8 px-3 shadow-sm">
+                            <span className="text-[10px] font-bold text-blue-600 mr-2 border-r pr-2">FY</span>
+                            <select value={selectedYear} onChange={(e)=>setSelectedYear(e.target.value)} className="text-xs font-bold bg-transparent outline-none">
+                                {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                            </select>
+                        </div>
                     </div>
-                    
                     <div className="flex items-center gap-3">
-                        {importSuccess && (
-                            <span className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg text-xs font-bold">
-                                <Icon name="CheckCircle2" size={14} /> Data Synced
-                            </span>
-                        )}
-                        <button onClick={() => window.print()} className="p-2 text-slate-500 hover:text-[#0f172a] hover:bg-white transition-colors border border-slate-200 rounded-lg bg-white shadow-sm w-9 h-9 flex items-center justify-center" title="Print">
-                            <Icon name="Printer" size={14} />
+                        {rawCsvData && <span className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg text-xs font-bold"><Icon name="CheckCircle2" size={14} /> Data Synced</span>}
+                        <button onClick={handleExportExcel} disabled={!rawCsvData} className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-blue-800 disabled:opacity-50 flex items-center gap-2">
+                            <Icon name="FileSpreadsheet" /> Export to Excel
                         </button>
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto p-8 pt-2 custom-scrollbar relative">
-                    
-                    {/* --- TAB 1: IMPORT --- */}
+                <div className="flex-1 overflow-y-auto p-8 pt-2 custom-scrollbar">
                     {activeTab === 'import' && (
-                        <div className="max-w-2xl mx-auto mt-10 animate-slide-up">
-                            <div className="bg-white border border-slate-200 rounded-2xl p-12 shadow-sm text-center">
-                                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                                    <Icon name="Database" size={32} className="text-blue-600" />
-                                </div>
-                                <h3 className="text-2xl font-bold text-[#0f172a] mb-2">Upload General Ledger</h3>
-                                <p className="text-slate-500 mb-8">Select a `.xlsx` or `.csv` file from Accrelate or Express.</p>
-                                <label className="border-2 border-dashed border-blue-200 bg-[#f8fafc] rounded-2xl p-10 block cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition-all group">
-                                    <input type="file" className="hidden" onChange={handleFileUpload} accept=".xlsx, .csv" />
-                                    {isImporting ? <Icon name="Loader2" size={40} className="fa-spin text-blue-500 mb-4" /> : <Icon name="Upload" size={40} className="text-blue-400 group-hover:scale-110 transition-transform mb-4" />}
-                                    <p className="font-bold text-blue-900">Click or drag file here</p>
+                        <div className="max-w-2xl mx-auto mt-10 animate-fade-in text-center">
+                            <div className="bg-white p-12 rounded-2xl border border-slate-200 shadow-sm">
+                                <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6"><Icon name="Database" size={32} /></div>
+                                <h3 className="text-2xl font-bold mb-2">Upload General Ledger</h3>
+                                <p className="text-slate-500 mb-8 text-sm">เลือกไฟล์ .xlsx หรือ .csv เพื่อสร้างรายงานโดยอัตโนมัติ</p>
+                                <label className="border-2 border-dashed border-blue-200 rounded-2xl p-10 block cursor-pointer hover:bg-blue-50 transition-all group">
+                                    <input type="file" className="hidden" onChange={handleFileUpload} />
+                                    {isImporting ? <Icon name="Loader2" size={40} className="text-blue-500" /> : <Icon name="Upload" size={40} className="text-slate-300 group-hover:text-blue-500" />}
+                                    <p className="mt-4 font-bold text-slate-700 italic">Click or drag file here</p>
                                 </label>
                             </div>
                         </div>
                     )}
 
-                    {/* --- TAB 2: VERIFY --- */}
-                    {activeTab === 'verify' && importSuccess && (
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm animate-slide-up h-[75vh] flex flex-col">
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                                <div><h3 className="font-black text-[#0f172a]">Transaction Re-check</h3><p className="text-xs text-slate-500 mt-1">ตรวจสอบและแก้ไขข้อมูลก่อนเข้าสู่ Dashboard</p></div>
-                                <div className="relative w-80">
-                                    <input type="text" placeholder="Search accounts..." value={searchVerify} onChange={e => setSearchVerify(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
-                                    <Icon name="ListCheck" className="absolute left-3 top-2.5 text-slate-400" />
-                                </div>
-                            </div>
-                            <div className="flex-1 overflow-auto custom-scrollbar p-0">
-                                <table className="w-full text-left text-sm border-collapse">
-                                    <thead className="sticky top-0 bg-white shadow-sm z-10">
-                                        <tr className="text-xs font-bold text-slate-500 uppercase tracking-widest border-b border-slate-100">
-                                            <th className="px-6 py-4">Date</th><th className="px-6 py-4">Account</th><th className="px-6 py-4">Name</th>
-                                            <th className="px-6 py-4 text-right">Debit</th><th className="px-6 py-4 text-right">Credit</th><th className="px-6 py-4 text-center">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {parsedTx.filter(tx => (!selectedYear || tx.year === -1 || tx.year === parseInt(selectedYear)) && (tx.code.includes(searchVerify) || tx.name.includes(searchVerify))).slice(0, 50).map((tx) => (
-                                            <tr key={tx.id} className="hover:bg-blue-50/50">
-                                                <td className="px-6 py-3 font-mono text-xs text-slate-500">{tx.date}</td>
-                                                <td className="px-6 py-3 font-bold text-blue-700">{tx.code}</td>
-                                                <td className="px-6 py-3 text-slate-700">{tx.name}</td>
-                                                <td className="px-6 py-3 text-right font-mono text-emerald-600">{formatCurrency(tx.rawDebit)}</td>
-                                                <td className="px-6 py-3 text-right font-mono text-rose-600">{formatCurrency(tx.rawCredit)}</td>
-                                                <td className="px-6 py-3 text-center">
-                                                    <button onClick={() => deleteTransaction(tx.id)} className="text-slate-400 hover:text-rose-600"><Icon name="Trash" /></button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* --- TAB 3: DASHBOARD --- */}
-                    {activeTab === 'dashboard' && importSuccess && (
-                        <div className="max-w-7xl mx-auto space-y-6 animate-slide-up">
-                            
-                            {/* Smart Command AI */}
-                            <div className="bg-[#1e2235] p-6 rounded-2xl shadow-xl text-white relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-8 opacity-10"><Icon name="PaperPlane" size={100} /></div>
-                                <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-                                    <div className="shrink-0 w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg"><Icon name="PaperPlane" size={20} /></div>
-                                    <div className="flex-1 w-full">
-                                        <h4 className="font-bold text-lg mb-1">Intelligence Insight</h4>
-                                        <input type="text" value={query} onChange={handleSmartQuery} placeholder="พิมพ์สั่งงาน AI เช่น: 'vs' หรือ 'กำไรสะสม'..." className="w-full bg-slate-800 border border-slate-700 rounded-xl px-5 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-500" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Custom Chart Render */}
-                            {customChart && (
-                                <div className="bg-white p-6 rounded-2xl shadow-lg border-2 border-blue-500 animate-slide-up">
-                                    <h3 className="font-black text-[#0f172a] mb-4 flex items-center gap-2"><Icon name="CheckCircle2" className="text-blue-500"/> {customChart.title}</h3>
-                                    <div className="h-64">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            {customChart.type === 'bar' ? (
-                                                <BarChart data={customChart.data}><CartesianGrid strokeDasharray="3 3" vertical={false}/><XAxis dataKey="name"/><YAxis tickFormatter={formatCompact}/><Tooltip formatter={(v)=>`฿${v.toLocaleString()}`}/><Legend/>{customChart.keys.map(k=><Bar key={k.k} dataKey={k.k} fill={k.c} radius={[4,4,0,0]}/>)}</BarChart>
-                                            ) : (
-                                                <AreaChart data={customChart.data}><defs><linearGradient id="col" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs><XAxis dataKey="name"/><YAxis tickFormatter={formatCompact}/><Tooltip formatter={(v)=>`฿${v.toLocaleString()}`}/><Area type="monotone" dataKey="Value" stroke="#10b981" fill="url(#col)" strokeWidth={3}/></AreaChart>
-                                            )}
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* KPIs */}
+                    {activeTab === 'dashboard' && rawCsvData && (
+                        <div className="max-w-7xl mx-auto space-y-6 animate-fade-in">
+                            {/* KPI Cards */}
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                 <KPICard title="REVENUE YTD" value={formatCompact(reportData.yearlyRev)} iconName="TrendingUp" iconBgClass="bg-blue-50" iconColorClass="text-blue-600" />
-                                <KPICard title="EXPENSES YTD" value={formatCompact(reportData.totalCombinedExp.reduce((a,b)=>a+b,0))} iconName="TrendingDown" iconBgClass="bg-orange-50" iconColorClass="text-orange-600" />
-                                <KPICard title="NET INCOME" value={formatCompact(reportData.yearlyNet)} iconName="DollarSign" iconBgClass="bg-emerald-50" iconColorClass="text-emerald-600" />
-                                <KPICard title="NET MARGIN" value={`${reportData.netMargin.toFixed(1)}%`} iconName="PieChartIcon" iconBgClass="bg-indigo-50" iconColorClass="text-indigo-600" />
+                                <KPICard title="EXPENSES YTD" value={formatCompact(reportData.totalExp.reduce((a,b)=>a+b,0))} iconName="TrendingDown" iconBgClass="bg-blue-50" iconColorClass="text-blue-600" />
+                                <KPICard title="NET INCOME" value={formatCompact(reportData.yearlyNet)} iconName="DollarSign" iconBgClass="bg-blue-50" iconColorClass="text-blue-600" />
+                                <KPICard title="NET MARGIN" value={`${((reportData.yearlyNet/reportData.yearlyRev)*100 || 0).toFixed(1)}%`} iconName="PieChartIcon" iconBgClass="bg-blue-50" iconColorClass="text-blue-600" />
                             </div>
 
-                            {/* Charts Row */}
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex flex-col h-[450px]">
-                                    <div className="flex justify-between items-start mb-6">
-                                        <div><h4 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="Target" className="text-blue-600" /> Budget vs. Actual</h4><p className="text-xs text-slate-400 mt-1 italic">กดที่แท่งสีน้ำเงิน (Actual) เพื่อดูรายละเอียดย่อย</p></div>
-                                        <div className="flex gap-4 text-xs font-bold"><div className="flex items-center gap-2"><span className="w-3 h-3 bg-blue-600 rounded"></span> Actual</div><div className="flex items-center gap-2"><span className="w-3 h-3 bg-slate-200 rounded"></span> Budget</div></div>
-                                    </div>
-                                    <div className="flex-1 w-full">
+                                <div className="lg:col-span-2 bg-white p-6 rounded-xl border shadow-sm h-[400px]">
+                                    <p className="text-sm font-bold mb-6">Income vs Expense Trend</p>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <ComposedChart data={MONTHS_SHORT.map((m, i) => ({ name: m, Rev: reportData.totalRev[i], Exp: reportData.totalExp[i] }))}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 11}} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11}} tickFormatter={(v)=>`${v/1000}k`} />
+                                            <Tooltip formatter={(v)=>`฿${v.toLocaleString()}`} />
+                                            <Bar dataKey="Rev" fill="#1e3a8a" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                                            <Bar dataKey="Exp" fill="#60a5fa" radius={[4, 4, 0, 0]} maxBarSize={30} />
+                                        </ComposedChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="bg-white p-6 rounded-xl border shadow-sm h-[400px] flex flex-col">
+                                    <p className="text-sm font-bold mb-4">Top Expenses</p>
+                                    <div className="flex-1 relative">
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <ComposedChart data={analyticsData} onClick={handleChartClick} margin={{top:0, right:0, left:-20, bottom:0}}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} dy={10} />
-                                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} tickFormatter={formatCompact} />
-                                                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}} formatter={(v) => `฿${v.toLocaleString()}`} />
-                                                <Bar dataKey="BudgetRev" fill="#e2e8f0" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                                                <Bar dataKey="ActualRev" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={30} className="cursor-pointer hover:opacity-80" />
-                                                <Line type="monotone" dataKey="ActualExp" stroke="#f97316" strokeWidth={3} dot={{r: 4, fill: '#f97316'}} />
-                                            </ComposedChart>
+                                            <PieChart>
+                                                <Pie data={[{name: 'Exp', value: 100}]} innerRadius="65%" outerRadius="85%" dataKey="value">
+                                                    <Cell fill="#1e3a8a" />
+                                                </Pie>
+                                            </PieChart>
                                         </ResponsiveContainer>
-                                    </div>
-                                </div>
-
-                                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex flex-col h-[450px]">
-                                    <p className="text-sm font-bold text-slate-800 mb-4">Financial Health Radar</p>
-                                    <div className="flex-1">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={healthData}>
-                                                <PolarGrid stroke="#e2e8f0" />
-                                                <PolarAngleAxis dataKey="subject" tick={{fontSize: 10, fontWeight: 600, fill: '#64748b'}} />
-                                                <Radar name="Company" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.5} />
-                                                <Tooltip />
-                                            </RadarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                    <div className="mt-4 p-4 bg-slate-50 border border-slate-100 rounded-lg">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase">AI Diagnosis</p>
-                                        <p className="text-xs font-semibold text-slate-700 mt-1">{reportData.netMargin > 15 ? "✅ สถานะการเงินแข็งแกร่ง กำไรดีเยี่ยม" : "⚠️ ระมัดระวังเรื่องสภาพคล่องและค่าใช้จ่าย"}</p>
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                            <span className="text-[10px] text-slate-400 font-bold">TOTAL</span>
+                                            <span className="text-lg font-black">{formatCompact(reportData.totalExp.reduce((a,b)=>a+b,0))}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
-
-                    {/* --- TAB 4: STATEMENTS --- */}
-                    {activeTab === 'statements' && importSuccess && (
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm animate-slide-up flex flex-col">
-                            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-white">
-                                <div className="flex bg-slate-100 p-1 rounded-lg">
-                                    <button onClick={() => setStatementView('tb')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${statementView === 'tb' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-blue-700'}`}>Trial Balance</button>
-                                    <button onClick={() => setStatementView('pnl')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${statementView === 'pnl' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-blue-700'}`}>Profit & Loss</button>
-                                </div>
-                            </div>
-                            <div className="overflow-x-auto w-full custom-scrollbar">
-                                {statementView === 'tb' && (
-                                    <table className="w-full text-left text-sm border-collapse">
-                                        <thead className="bg-[#0f172a]">
-                                            <tr>
-                                                <th className="px-6 py-4 text-xs font-bold text-white uppercase tracking-widest w-32 border-r border-slate-700">Account</th>
-                                                <th className="px-6 py-4 text-xs font-bold text-white uppercase tracking-widest border-r border-slate-700">Name</th>
-                                                <th className="px-6 py-4 text-xs font-bold text-white uppercase tracking-widest text-right w-48 border-r border-slate-700">Debit</th>
-                                                <th className="px-6 py-4 text-xs font-bold text-white uppercase tracking-widest text-right w-48">Credit</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {reportData.tbAccounts.map((acc, i) => (
-                                                <tr key={i} className="hover:bg-blue-50/50 border-b border-slate-100">
-                                                    <td className="px-6 py-3 font-mono text-slate-500 border-r border-slate-100">{acc.id}</td>
-                                                    <td className="px-6 py-3 font-semibold text-slate-800 border-r border-slate-100">{acc.name}</td>
-                                                    <td className="px-6 py-3 text-right font-mono text-emerald-600">{acc.dr > 0 ? formatCurrency(acc.dr) : '-'}</td>
-                                                    <td className="px-6 py-3 text-right font-mono text-rose-600">{acc.cr > 0 ? formatCurrency(acc.cr) : '-'}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
-                                {statementView === 'pnl' && (
-                                    <table className="w-full min-w-[1400px] text-left text-sm border-collapse">
-                                        <thead className="bg-[#0f172a]">
-                                            <tr>
-                                                <th className="sticky left-0 z-20 px-6 py-4 text-xs font-bold text-white uppercase tracking-widest border-r border-slate-700 bg-[#0f172a]">Account</th>
-                                                {MONTHS_SHORT.map((m, i) => <th key={i} className="px-3 py-4 text-xs font-bold text-slate-300 uppercase tracking-widest text-right border-r border-slate-700/50">{m}</th>)}
-                                                <th className="px-6 py-4 text-xs font-bold text-white uppercase tracking-widest text-right">YTD Total</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr><td colSpan="14" className="px-6 py-3 text-[11px] font-bold text-blue-600 uppercase tracking-widest bg-blue-50">Revenue</td></tr>
-                                            {financialData.revenue.map((item, i) => <StatementRow key={i} item={item} viewType={statementView} />)}
-                                            <StatementTotalRow label="Total Revenue" values={reportData.totalRev} viewType={statementView} />
-                                            <tr><td colSpan="14" className="px-6 py-3 text-[11px] font-bold text-orange-600 uppercase tracking-widest bg-orange-50 pt-6">Expenses</td></tr>
-                                            {[...financialData.cogs, ...financialData.opex].map((item, i) => <StatementRow key={i} item={item} isSub viewType={statementView} />)}
-                                            <StatementTotalRow label="Total Expenses" values={reportData.totalCombinedExp} viewType={statementView} />
-                                            <tr className="h-4"><td colSpan="14"></td></tr>
-                                            <StatementTotalRow label="NET INCOME" values={reportData.netIncomeMonthly} viewType={statementView} isGrandTotal />
-                                        </tbody>
-                                    </table>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* --- Empty State --- */}
-                    {activeTab !== 'import' && !importSuccess && (
-                        <div className="h-[60vh] flex flex-col items-center justify-center text-center animate-slide-up">
-                            <div className="w-24 h-24 bg-white shadow-sm border border-slate-200 rounded-full flex items-center justify-center mb-6"><Icon name="FileText" size={40} className="text-slate-300" /></div>
-                            <h2 className="text-xl font-bold text-slate-800 mb-2">No Financial Data Loaded</h2>
-                            <p className="text-sm text-slate-500 mb-6">Please import a General Ledger file to generate insights.</p>
-                            <button onClick={() => setActiveTab('import')} className="bg-blue-600 text-white px-6 py-3 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-md">Go to Import</button>
                         </div>
                     )}
                 </div>
-
-                {/* --- Drill-down Modal --- */}
-                {drillDownData.open && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center modal-overlay p-4">
-                        <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden animate-slide-up max-h-[80vh] flex flex-col">
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                                <h3 className="font-black text-[#0f172a] text-lg uppercase tracking-tight">{drillDownData.title}</h3>
-                                <button onClick={() => setDrillDownData({...drillDownData, open: false})} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-500 transition-all"><Icon name="Xmark" size={20} /></button>
-                            </div>
-                            <div className="p-0 overflow-y-auto flex-1 custom-scrollbar">
-                                <table className="w-full text-left text-sm border-collapse">
-                                    <thead className="sticky top-0 bg-white shadow-sm">
-                                        <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                                            <th className="py-4 px-6">Date</th><th className="py-4 px-6">Account</th><th className="py-4 px-6">Description</th><th className="py-4 px-6 text-right">Credit (Revenue)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {drillDownData.rows.length > 0 ? drillDownData.rows.map((row) => (
-                                            <tr key={row.id} className="hover:bg-blue-50/50 transition-colors">
-                                                <td className="py-4 px-6 font-mono text-xs text-slate-500">{row.date}</td>
-                                                <td className="py-4 px-6 font-bold text-blue-600">{row.code}</td>
-                                                <td className="py-4 px-6 font-semibold text-slate-700">{row.desc || row.name}</td>
-                                                <td className="py-4 px-6 text-right font-black text-emerald-600">{formatCurrency(row.rawCredit)}</td>
-                                            </tr>
-                                        )) : (
-                                            <tr><td colSpan="4" className="py-10 text-center text-slate-400">ไม่มีข้อมูลธุรกรรมในเดือนนี้</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
-                                <div className="flex justify-between items-center bg-blue-100/50 p-4 rounded-xl border border-blue-200">
-                                    <span className="text-xs font-bold text-blue-800 uppercase">Total Monthly Revenue</span>
-                                    <span className="text-xl font-black text-blue-900">฿ {drillDownData.rows.reduce((sum, r) => sum + (r.rawCredit || 0), 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
             </main>
         </div>
     );
 };
+
+// --- KPI Card Sub-component ---
+const KPICard = ({ title, value, iconName, iconBgClass, iconColorClass }) => (
+    <div className="bg-white rounded-xl p-6 border-l-4 border-[#1e3a8a] shadow-sm flex flex-col justify-between h-36">
+        <div className={`${iconBgClass} ${iconColorClass} p-2 rounded-lg flex items-center justify-center w-10 h-10`}>
+            <Icon name={iconName} size={18} />
+        </div>
+        <div className="mt-4">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+            <h3 className="text-2xl font-black text-[#0f172a] tracking-tight">{value}</h3>
+        </div>
+    </div>
+);
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
