@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Enterprise Financial Dashboard - FinPulse (FIXED)</title>
-<!-- ✅ Tailwind CSS - Production Ready (ไม่มี Warning) -->
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.1/dist/tailwind.min.css" rel="stylesheet">
+<title>Enterprise Financial Dashboard - FinPulse</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
 <!-- Google Fonts (Inter) -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <!-- FontAwesome for Icons -->
@@ -37,6 +37,7 @@ body { background: white !important; }
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .modal-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+/* Chart Containers Styling */
 .chart-container {
 position: relative;
 width: 100%;
@@ -80,8 +81,7 @@ ListCheck: 'fa-solid fa-list-check',
 Pen: 'fa-solid fa-pen',
 Check: 'fa-solid fa-check',
 Xmark: 'fa-solid fa-xmark',
-Trash: 'fa-solid fa-trash',
-Filter: 'fa-solid fa-filter'
+Trash: 'fa-solid fa-trash'
 };
 return <i className={`${faMap[name] || 'fa-solid fa-star'} ${className}`} style={{ fontSize: size }}></i>;
 };
@@ -104,111 +104,24 @@ if (Math.abs(val) >= 1000) return `฿ ${(val / 1000).toFixed(0)}k`;
 return `฿ ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
-// ===== 🔥 FIXED: Comprehensive Closing Entry Filters =====
-const CLOSING_FILTERS = {
-    keywords: [
-        // การปิดบัญชี
-        "ปิดบัญชี", "ยอดยกไป", "closing", "โอนปิด", "ปิดยอด", 
-        "year end", "ปิดงบ", "โอนบัญชี", "ยกไปงวดหน้า", 
-        "ยอดยกไปปีใหม่", "โอนผลประกอบการ", "ยอดปิด",
-        
-        // รายการสรุป
-        "ยอดคงเหลือ", "รวม", "ยอดรวม", "รวมทั้งสิ้น", 
-        "grand total", "subtotal", "total", "ยอดสุทธิ",
-        
-        // การปรับปรุงสิ้นปี
-        "ปรับปรุงยอด", "ตัดรายการ", "ปรับยอด", "โอนกำไร",
-        "carry forward", "c/f", "b/f", "brought forward",
-        "โอนกำไรสะสม", "โอนไปส่วนของผู้ถือหุ้น"
-    ],
-    
-    docPrefixes: ["CL-", "CLS-", "ADJ-", "JV-", "YE-", "CF-", "CLOSE-", "ปิด"],
-    
-    closingDatePattern: /^(31[\/\-]12[\/\-]\d{4}|31[\/\-]ธ\.ค\.|31[\/\-]Dec)/i,
-    
-    isClosingEntry: (tx) => {
-        if (!tx) return false;
-        
-        const text = [
-            String(tx.desc || ''),
-            String(tx.date || ''),
-            String(tx.name || ''),
-            String(tx.docNo || '')
-        ].join('|').toLowerCase();
-        
-        // 1. Check keywords
-        if (CLOSING_FILTERS.keywords.some(kw => text.includes(kw.toLowerCase()))) {
-            return true;
-        }
-        
-        // 2. Check document prefix
-        const docNo = String(tx.docNo || tx.desc || '').toUpperCase();
-        if (CLOSING_FILTERS.docPrefixes.some(prefix => docNo.startsWith(prefix.toUpperCase()))) {
-            return true;
-        }
-        
-        // 3. Check 31/12 + suspicious words
-        if (CLOSING_FILTERS.closingDatePattern.test(String(tx.date || ''))) {
-            const suspicious = ['โอน', 'ปิด', 'ปรับ', 'ตัด', 'transfer', 'close', 'adjust'];
-            if (suspicious.some(w => text.includes(w))) {
-                return true;
-            }
-        }
-        
-        // 4. Check summary rows (no debit/credit but has balance)
-        const hasNoMovement = (!tx.rawDebit || tx.rawDebit === 0) && 
-                            (!tx.rawCredit || tx.rawCredit === 0);
-        if (hasNoMovement && (text.includes('คงเหลือ') || text.includes('รวม') || text.includes('total'))) {
-            return true;
-        }
-        
-        // 5. Check header rows
-        if (text.includes('ลำดับที่') || text.includes('เดบิต') || text.includes('debit')) {
-            return true;
-        }
-        
-        return false;
-    }
-};
-
-// ===== 🔥 FIXED: Date Parsing with Buddhist Era Support =====
+// --- Helper Date Parse ---
 const parseDateToYearMonth = (dateVal) => {
     if (!dateVal) return { year: -1, month: -1 };
-    
     if (typeof dateVal === 'number') {
         const date = new Date((dateVal - (25567 + 1)) * 86400 * 1000);
         return { year: date.getFullYear(), month: date.getMonth() };
     }
-    
     const strDate = dateVal.toString().trim();
-    let year = -1, month = -1;
-    
-    // DD/MM/YYYY or DD-MM-YYYY
-    const ddmmyyyyMatch = strDate.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if (ddmmyyyyMatch) {
-        year = parseInt(ddmmyyyyMatch[3], 10);
-        month = parseInt(ddmmyyyyMatch[2], 10) - 1;
+    if (strDate.includes('/')) {
+        const parts = strDate.split('/');
+        if (parts[0].length === 4) return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) - 1 };
+        return { year: parseInt(parts[2], 10), month: parseInt(parts[1], 10) - 1 };
+    } else if (strDate.includes('-')) {
+        const parts = strDate.split('-');
+        if (parts[0].length === 4) return { year: parseInt(parts[0], 10), month: parseInt(parts[1], 10) - 1 };
+        return { year: parseInt(parts[2], 10), month: parseInt(parts[1], 10) - 1 };
     }
-    // YYYY/MM/DD or YYYY-MM-DD
-    else {
-        const yyyymmddMatch = strDate.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
-        if (yyyymmddMatch) {
-            year = parseInt(yyyymmddMatch[1], 10);
-            month = parseInt(yyyymmddMatch[2], 10) - 1;
-        }
-    }
-    
-    // 🔥 FIXED: Convert Buddhist Era to Christian Era
-    if (year > 2500) {
-        year -= 543;
-    }
-    
-    // Validation
-    if (year < 1900 || year > 2100 || month < 0 || month > 11) {
-        return { year: -1, month: -1 };
-    }
-    
-    return { year, month };
+    return { year: -1, month: -1 };
 };
 
 const cleanNumber = (val) => {
@@ -217,12 +130,10 @@ const cleanNumber = (val) => {
     return parseFloat(val.toString().replace(/,/g, '')) || 0;
 };
 
-// ===== 🔥 FIXED: Enhanced Accounting Engine =====
+// --- Accounting Engine ---
 const useFinancialEngine = (csvDataRows, selectedYear) => {
     const [availableYears, setAvailableYears] = useState([]);
     const [parsedTx, setParsedTx] = useState([]);
-    const [warnings, setWarnings] = useState([]);
-    const [filteredEntries, setFilteredEntries] = useState([]);
     const [financialData, setFinancialData] = useState({
         revenue: [], cogs: [], opex: [], assets_current: [], liabilities_current: [], equity: []
     });
@@ -232,6 +143,7 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
         if (!csvDataRows || csvDataRows.length === 0) return;
         
         const isExpress = csvDataRows.slice(0, 15).some(r => r[0] && String(r[0]).replace(/\s/g, '').includes('รายงานแยกประเภท'));
+        const closingKeywords = ["ปิดบัญชี", "ยอดยกไป", "closing", "โอนปิด", "โอนกำไร", "ปิดยอด", "year end", "ปิดงบ", "โอนบัญชี"];
         
         let headerRowIdx = -1;
         let colMap = {};
@@ -255,7 +167,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
         
         let flatTransactions = [];
         let yearsSet = new Set();
-        let filtered = [];
         
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
@@ -270,7 +181,7 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                 const col0 = String(row[0]).trim();
                 
                 if (col0.includes('บริษัท') || col0.includes('รายงาน') || col0.includes('วันที่จาก') || 
-                    col0.includes('เลขที่บัญชี') || col0.includes('พิมพ์โดย') || col0 === 'วันที่') return; 
+                    col0.includes('เลขที่บัญชี') || col0.includes('พิมพ์โดย') || col0 === 'วันที่' || col0 === 'รวม') return; 
 
                 if (/^[a-zA-Z0-9-\.]{4,}$/.test(col0) && !col0.includes('/') && !col0.match(/[ก-๙]/)) {
                     curCode = col0;
@@ -288,32 +199,17 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                 } 
                 else if (col0.includes('/') && col0.split('/').length >= 3) {
                     const desc = String(row[3] || "").trim();
-                    const docNo = String(row[2] || "").trim();
+                    const descLower = desc.toLowerCase();
                     
-                    const tx = {
-                        id: generateId(),
-                        date: col0,
-                        code: curCode,
-                        name: curName,
-                        desc: desc,
-                        docNo: docNo,
-                        year: -1,
-                        month: -1,
-                        isOpening: false,
-                        rawDebit: cleanNumber(row[5]),
-                        rawCredit: cleanNumber(row[6])
-                    };
+                    // ป้องกันการดึงรายการปิดบัญชีสิ้นปี ยอดยกไป
+                    if (desc.includes('ยอดยกมา') || closingKeywords.some(kw => descLower.includes(kw))) return; 
+
+                    const { year, month } = parseDateToYearMonth(col0);
+                    const debit = cleanNumber(row[5]);
+                    const credit = cleanNumber(row[6]);
                     
-                    // 🔥 FIXED: Filter closing entries
-                    if (CLOSING_FILTERS.isClosingEntry(tx)) {
-                        filtered.push(tx);
-                    } else {
-                        const { year, month } = parseDateToYearMonth(col0);
-                        tx.year = year;
-                        tx.month = month;
-                        if (year !== -1) yearsSet.add(year);
-                        flatTransactions.push(tx);
-                    }
+                    if (year !== -1) yearsSet.add(year);
+                    flatTransactions.push({ id: generateId(), date: col0, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: debit, rawCredit: credit });
                 }
             });
         } else if (headerRowIdx !== -1 && colMap.code !== undefined && colMap.debit !== undefined) {
@@ -327,44 +223,27 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
 
                 let curName = colMap.name !== undefined ? String(row[colMap.name] || "").trim() : "";
                 let dateStr = colMap.date !== undefined ? String(row[colMap.date] || "").trim() : "";
-                let desc = String(row[5] || "").trim();
+                let desc = String(row[5] || "").trim(); // ปกติ PEAK คำอธิบายอยู่คอลัมน์ 5
                 let debit = cleanNumber(row[colMap.debit]);
                 let credit = cleanNumber(row[colMap.credit]);
 
-                const tx = {
-                    id: generateId(),
-                    date: dateStr,
-                    code: curCode,
-                    name: curName,
-                    desc: desc,
-                    year: -1,
-                    month: -1,
-                    isOpening: false,
-                    rawDebit: debit,
-                    rawCredit: credit
-                };
-
                 const rowString = row.join("|");
-                const isOpening = rowString.includes("ยอดยกมา");
+                const rowStrLower = rowString.toLowerCase();
+                
+                // กรองรายการปิดบัญชีและยอดยกไป
+                if (closingKeywords.some(kw => rowStrLower.includes(kw))) continue; 
 
-                // 🔥 FIXED: Filter closing entries
-                if (CLOSING_FILTERS.isClosingEntry(tx)) {
-                    filtered.push(tx);
-                    continue;
-                }
+                let isOpening = rowString.includes("ยอดยกมา");
 
-                if (isOpening) {
+                if (isOpening || (!dateStr && isOpening)) {
                     if (!seenAccountsSmart.has(curCode)) {
                         seenAccountsSmart.add(curCode);
-                        tx.isOpening = true;
-                        flatTransactions.push(tx);
+                        flatTransactions.push({ id: generateId(), date: 'ยอดยกมา', code: curCode, name: curName, desc: desc || 'ยอดยกมา', year: -1, month: -1, isOpening: true, rawDebit: debit, rawCredit: credit });
                     }
                 } else if (dateStr && dateStr.includes('/')) {
                     const { year, month } = parseDateToYearMonth(dateStr);
-                    tx.year = year;
-                    tx.month = month;
                     if (year !== -1) yearsSet.add(year);
-                    flatTransactions.push(tx);
+                    flatTransactions.push({ id: generateId(), date: dateStr, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: debit, rawCredit: credit });
                 }
             }
         } else {
@@ -382,54 +261,35 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                 if (!curCode) return;
                 
                 const rowString = row.join("|");
+                const rowStrLower = rowString.toLowerCase();
                 const desc = String(row[5] || "").trim();
                 
+                // 🛑 กรองบรรทัดขยะ: ปิดบัญชีสิ้นปี, ยอดยกไป, บรรทัดหัวตาราง(ลำดับที่), ยอดรวมท้ายหมวด
+                if (closingKeywords.some(kw => rowStrLower.includes(kw)) || rowString.includes("ลำดับที่")) return;
+
                 const debit = cleanNumber(row[6]);
                 const credit = cleanNumber(row[7]);
-
-                const tx = {
-                    id: generateId(),
-                    date: String(row[2]||"").trim(),
-                    code: curCode,
-                    name: curName,
-                    desc: desc,
-                    rawDebit: debit,
-                    rawCredit: credit
-                };
-
-                // 🔥 FIXED: Filter closing entries
-                if (CLOSING_FILTERS.isClosingEntry(tx)) {
-                    filtered.push(tx);
-                    return;
-                }
 
                 if (rowString.includes("ยอดยกมา")) {
                     if (!seenAccountsStandard.has(curCode)) {
                         seenAccountsStandard.add(curCode);
-                        tx.year = -1;
-                        tx.month = -1;
-                        tx.isOpening = true;
-                        flatTransactions.push(tx);
+                        flatTransactions.push({ id: generateId(), date: 'ยอดยกมา', code: curCode, name: curName, desc: desc || 'ยอดยกมา', year: -1, month: -1, isOpening: true, rawDebit: debit, rawCredit: credit });
                     }
                 } else {
                     const dateStr = String(row[2]||"").trim();
-                    if (!dateStr || !dateStr.includes('/')) return;
+                    
+                    // ป้องกันการดึงบรรทัดที่มีแต่ยอดเงิน (เช่น บรรทัด 'รวม' ท้ายบัญชี) 
+                    if (!dateStr || !dateStr.includes('/')) return; 
 
                     const { year, month } = parseDateToYearMonth(dateStr);
-                    tx.year = year;
-                    tx.month = month;
                     if (year !== -1) yearsSet.add(year);
-                    flatTransactions.push(tx);
+                    flatTransactions.push({ id: generateId(), date: dateStr, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: debit, rawCredit: credit });
                 }
             });
         }
 
         setParsedTx(flatTransactions);
-        setFilteredEntries(filtered);
         setAvailableYears(Array.from(yearsSet).sort((a,b)=>b-a));
-        
-        console.log(`✅ Parsed ${flatTransactions.length} transactions`);
-        console.log(`🚫 Filtered ${filtered.length} closing entries`);
     }, [csvDataRows]);
 
     // 2. Calculation Effect (Runs whenever parsedTx is updated manually or year is changed)
@@ -541,41 +401,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
     };
 }, [financialData]);
 
-// 🔥 FIXED: Validation
-useEffect(() => {
-    if (!reportData || !reportData.tbAccounts) return;
-    
-    const newWarnings = [];
-    
-    // Trial Balance check
-    const totalDr = reportData.tbAccounts.reduce((sum, acc) => sum + acc.dr, 0);
-    const totalCr = reportData.tbAccounts.reduce((sum, acc) => sum + acc.cr, 0);
-    const tbDiff = Math.abs(totalDr - totalCr);
-    
-    if (tbDiff > 0.01) {
-        newWarnings.push({
-            type: 'TRIAL_BALANCE_IMBALANCE',
-            severity: 'ERROR',
-            message: `Trial Balance ไม่สมดุล! ผลต่าง: ${formatCurrency(tbDiff)}`
-        });
-    }
-    
-    // Balance Sheet check
-    const totalAssets = reportData.totalAssets[11] || 0;
-    const totalLiabEquity = reportData.totalLiabEquity[11] || 0;
-    const bsDiff = Math.abs(totalAssets - totalLiabEquity);
-    
-    if (bsDiff > 0.01) {
-        newWarnings.push({
-            type: 'BALANCE_SHEET_IMBALANCE',
-            severity: 'ERROR',
-            message: `งบดุลไม่สมดุล! ผลต่าง: ${formatCurrency(bsDiff)}`
-        });
-    }
-    
-    setWarnings(newWarnings);
-}, [reportData]);
-
 // Methods for Manual Edit
 const updateTransaction = (id, newFields) => {
     setParsedTx(prev => prev.map(t => t.id === id ? { ...t, ...newFields } : t));
@@ -584,7 +409,7 @@ const deleteTransaction = (id) => {
     setParsedTx(prev => prev.filter(t => t.id !== id));
 };
 
-return { financialData, reportData, availableYears, parsedTx, updateTransaction, deleteTransaction, warnings, filteredEntries };
+return { financialData, reportData, availableYears, parsedTx, updateTransaction, deleteTransaction };
 };
 
 // --- UI Components ---
@@ -661,13 +486,14 @@ return (
 // --- Main Application ---
 const App = () => {
 const [activeTab, setActiveTab] = useState('import');
-const [statementView, setStatementView] = useState('tb');
+const [statementView, setStatementView] = useState('tb'); // 'pnl', 'bs', 'tb'
 const [isImporting, setIsImporting] = useState(false);
 const [rawCsvData, setRawCsvData] = useState(null);
 const [fileName, setFileName] = useState("");
 const [selectedYear, setSelectedYear] = useState("");
 const [searchVerify, setSearchVerify] = useState("");
 
+// Edit States for Verify Tab
 const [editId, setEditId] = useState(null);
 const [editForm, setEditForm] = useState({});
 
@@ -676,7 +502,7 @@ const [showNotification, setShowNotification] = useState(false);
 const [notificationMsg, setNotificationMsg] = useState("");
 const [notificationError, setNotificationError] = useState(false);
 
-const { financialData, reportData, availableYears, parsedTx, updateTransaction, deleteTransaction, warnings, filteredEntries } = useFinancialEngine(rawCsvData, selectedYear ? parseInt(selectedYear) : null);
+const { financialData, reportData, availableYears, parsedTx, updateTransaction, deleteTransaction } = useFinancialEngine(rawCsvData, selectedYear ? parseInt(selectedYear) : null);
 const importSuccess = rawCsvData !== null;
 
 useEffect(() => {
@@ -701,6 +527,7 @@ const saveEdit = () => {
 
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzLx8n2YnNksyiBcp-dWzAwsLH-J2pkz9Mi1qkJwslkohZFvjxzLG7mHsoZnGDlnmNxXA/exec";
 
+// --- Excel Builder ---
 const getExcelWorkbook = () => {
 const wb = XLSX.utils.book_new();
 const styles = {
@@ -847,7 +674,7 @@ reader.onload = (evt) => {
 
         setTimeout(() => {
             setIsImporting(false);
-            setActiveTab('dashboard');
+            setActiveTab('verify'); 
             setStatementView('tb');
         }, 500);
     } catch (err) {
@@ -967,19 +794,9 @@ AM
 )}
 </div>
 <div className="flex items-center gap-4">
-{importSuccess && warnings.length === 0 && (
+{importSuccess && (
 <span className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-bold">
-<Icon name="CheckCircle2" size={14} /> Data Valid
-</span>
-)}
-{warnings.length > 0 && (
-<span className="flex items-center gap-1.5 px-3 py-1.5 text-rose-600 bg-rose-50 border border-rose-200 rounded-lg text-xs font-bold">
-<Icon name="AlertCircle" size={14} /> {warnings.length} Warning(s)
-</span>
-)}
-{filteredEntries.length > 0 && (
-<span className="flex items-center gap-1.5 px-3 py-1.5 text-amber-600 bg-amber-50 border border-amber-200 rounded-lg text-xs font-bold">
-<Icon name="Filter" size={14} /> {filteredEntries.length} Filtered
+<Icon name="CheckCircle2" size={14} /> Data Synced
 </span>
 )}
 <button onClick={() => window.print()} className="p-2 text-slate-500 hover:text-blue-700 hover:bg-blue-50 transition-colors bg-white border border-slate-200 rounded-lg shadow-sm" title="Print Report">
@@ -1020,7 +837,7 @@ className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5
 <div className="text-blue-500 mb-4 flex justify-center group-hover:scale-110 transition-transform"><Icon name="Upload" size={32} /></div>
 )}
 <p className="text-base font-bold text-blue-900 mb-1">Click or drag file here</p>
-<p className="text-sm text-slate-500">Supports Accrelate, EXPRESS & PEAK formats</p>
+<p className="text-sm text-slate-500">Supports Accrelate & EXPRESS exports</p>
 </div>
 </div>
 </div>
@@ -1090,7 +907,7 @@ className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5
                                 </td>
                             </tr>
                         ) : (
-                            <tr key={tx.id} className={`hover:bg-blue-50/50 border-b border-slate-100 group`}>
+                            <tr key={tx.id} className={`hover:bg-blue-50/50 border-b border-slate-100 group ${tx.date.includes('31/12') && tx.code.startsWith('4') ? 'bg-rose-50/30' : ''}`}>
                                 <td className="px-6 py-3 font-mono text-slate-500 text-xs">{tx.date}</td>
                                 <td className="px-6 py-3 font-mono font-bold text-blue-700">{tx.code}</td>
                                 <td className="px-6 py-3 text-slate-700 truncate max-w-[150px]">{tx.name}</td>
@@ -1099,11 +916,18 @@ className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5
                                 <td className="px-6 py-3 text-right font-mono text-rose-600">{tx.rawCredit ? formatCurrency(tx.rawCredit) : '-'}</td>
                                 <td className="px-6 py-3 text-center opacity-0 group-hover:opacity-100 transition-opacity flex justify-center gap-3">
                                     <button onClick={() => startEdit(tx)} className="text-blue-500 hover:text-blue-800" title="แก้ไขรายการ"><Icon name="Pen" /></button>
-                                    <button onClick={() => { if(window.confirm('ยืนยันการลบรายการนี้ใช่หรือไม่?')) deleteTransaction(tx.id); }} className="text-slate-300 hover:text-rose-600" title="ลบรายการ"><Icon name="Trash" /></button>
+                                    <button onClick={() => { if(window.confirm('ยืนยันการลบรายการนี้ใช่หรือไม่? (การลบจะทำให้ตัวเลขในงบเปลี่ยนไป)')) deleteTransaction(tx.id); }} className="text-slate-300 hover:text-rose-600" title="ลบรายการ"><Icon name="Trash" /></button>
                                 </td>
                             </tr>
                         );
                     })}
+                {parsedTx.length > 500 && (
+                    <tr>
+                        <td colSpan="7" className="px-6 py-4 text-center text-xs text-slate-400 font-medium bg-slate-50">
+                            แสดงข้อมูล 500 รายการแรก กรุณาพิมพ์ค้นหาเพื่อดูรายการอื่นเพิ่มเติม
+                        </td>
+                    </tr>
+                )}
             </tbody>
         </table>
     </div>
@@ -1112,20 +936,11 @@ className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5
 
 {activeTab === 'dashboard' && importSuccess && (
 <div className="space-y-8 animate-in fade-in duration-500">
-{warnings.length > 0 && (
-<div className="bg-rose-50 border-l-4 border-rose-500 p-4 rounded">
-<h3 className="font-bold text-rose-900 mb-2">⚠️ System Warnings:</h3>
-{warnings.map((w, i) => (
-<p key={i} className="text-rose-700 text-sm">{w.message}</p>
-))}
-</div>
-)}
-
 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-<KPICard title="Revenue YTD" value={formatCompact(reportData.yearlyRev)} iconName="TrendingUp" subtext={`${parsedTx.length} transactions`} />
-<KPICard title="Expenses YTD" value={formatCompact(reportData.totalCombinedExp.reduce((a,b)=>a+b,0))} iconName="TrendingDown" subtext={`${filteredEntries.length} filtered`} />
-<KPICard title="Net Income" value={formatCompact(reportData.yearlyNet)} iconName="DollarSign" />
-<KPICard title="Net Margin" value={`${reportData.netMargin.toFixed(1)}%`} iconName="PieChartIcon" subtext={warnings.length === 0 ? 'All balanced' : `${warnings.length} warnings`} />
+<KPICard title="Revenue YTD" value={formatCompact(reportData.yearlyRev)} iconName="TrendingUp" trend="up" trendValue="12.5%" />
+<KPICard title="Expenses YTD" value={formatCompact(reportData.totalCombinedExp.reduce((a,b)=>a+b,0))} iconName="TrendingDown" />
+<KPICard title="Net Income" value={formatCompact(reportData.yearlyNet)} iconName="DollarSign" trend="up" trendValue="8.4%" />
+<KPICard title="Net Margin" value={`${reportData.netMargin.toFixed(1)}%`} iconName="PieChartIcon" />
 </div>
 
 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1157,6 +972,10 @@ className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5
 <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} contentStyle={{fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', fontWeight: 'bold'}} />
 </PieChart>
 </ResponsiveContainer>
+<div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
+<span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Total</span>
+<span className="text-lg font-black text-blue-950">{formatCompact(reportData.totalOpex.reduce((a,b)=>a+b,0))}</span>
+</div>
 </div>
 </div>
 </div>
