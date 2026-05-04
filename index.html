@@ -4,22 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Enterprise Financial Dashboard - FinPulse</title>
-<!-- Tailwind CSS -->
 <script src="https://cdn.tailwindcss.com"></script>
-<!-- Google Fonts (Inter) -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<!-- FontAwesome for Icons -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<!-- React & ReactDOM -->
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<!-- Prop Types -->
 <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
-<!-- Babel -->
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<!-- Recharts -->
 <script src="https://unpkg.com/recharts@2.1.9/umd/Recharts.js"></script>
-<!-- SheetJS (Excel Export/Import) -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
 body { font-family: 'Inter', sans-serif; }
@@ -35,8 +27,9 @@ body { background: white !important; }
 .sticky { position: static !important; }
 .border, .shadow-sm { box-shadow: none !important; border: none !important; border-bottom: 1px solid #f1f5f9 !important; }
 }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-.modal-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.modal-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+.animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
 /* Chart Containers Styling */
 .chart-container {
 position: relative;
@@ -50,7 +43,8 @@ margin-right: auto;
 <div id="root"></div>
 <script type="text/babel">
 const { useState, useMemo, useEffect } = React;
-const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } = window.Recharts;
+// เพิ่มการนำเข้า AreaChart, RadarChart และส่วนประกอบที่เกี่ยวข้องจาก Recharts
+const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ComposedChart, AreaChart, Area, Radar, RadarChart, PolarGrid, PolarAngleAxis, Legend } = window.Recharts;
 
 // --- Icon Wrapper ---
 const Icon = ({ name, size = 16, className = "" }) => {
@@ -138,7 +132,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
         revenue: [], cogs: [], opex: [], assets_current: [], liabilities_current: [], equity: []
     });
 
-    // 1. Parsing Effect (Run ONLY when file changes)
     useEffect(() => {
         if (!csvDataRows || csvDataRows.length === 0) return;
         
@@ -171,11 +164,9 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
         if (isExpress) {
-            // --- EXPRESS PARSER ---
             let curCode = "";
             let curName = "";
             let seenAccounts = new Set(); 
-
             csvDataRows.forEach(row => {
                 if (!row || !row[0]) return;
                 const col0 = String(row[0]).trim();
@@ -201,7 +192,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                     const desc = String(row[3] || "").trim();
                     const descLower = desc.toLowerCase();
                     
-                    // ป้องกันการดึงรายการปิดบัญชีสิ้นปี ยอดยกไป
                     if (desc.includes('ยอดยกมา') || closingKeywords.some(kw => descLower.includes(kw))) return; 
 
                     const { year, month } = parseDateToYearMonth(col0);
@@ -213,7 +203,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                 }
             });
         } else if (headerRowIdx !== -1 && colMap.code !== undefined && colMap.debit !== undefined) {
-            // --- SMART PARSER ---
             let seenAccountsSmart = new Set();
             for(let i = headerRowIdx + 1; i < csvDataRows.length; i++) {
                 const row = csvDataRows[i];
@@ -223,14 +212,13 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
 
                 let curName = colMap.name !== undefined ? String(row[colMap.name] || "").trim() : "";
                 let dateStr = colMap.date !== undefined ? String(row[colMap.date] || "").trim() : "";
-                let desc = String(row[5] || "").trim(); // ปกติ PEAK คำอธิบายอยู่คอลัมน์ 5
+                let desc = String(row[5] || "").trim(); 
                 let debit = cleanNumber(row[colMap.debit]);
                 let credit = cleanNumber(row[colMap.credit]);
 
                 const rowString = row.join("|");
                 const rowStrLower = rowString.toLowerCase();
                 
-                // กรองรายการปิดบัญชีและยอดยกไป
                 if (closingKeywords.some(kw => rowStrLower.includes(kw))) continue; 
 
                 let isOpening = rowString.includes("ยอดยกมา");
@@ -247,7 +235,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                 }
             }
         } else {
-            // --- STANDARD PARSER (PEAK / GT-NEX) ---
             let curCode = "";
             let curName = "";
             let seenAccountsStandard = new Set();
@@ -264,7 +251,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                 const rowStrLower = rowString.toLowerCase();
                 const desc = String(row[5] || "").trim();
                 
-                // 🛑 กรองบรรทัดขยะ: ปิดบัญชีสิ้นปี, ยอดยกไป, บรรทัดหัวตาราง(ลำดับที่), ยอดรวมท้ายหมวด
                 if (closingKeywords.some(kw => rowStrLower.includes(kw)) || rowString.includes("ลำดับที่")) return;
 
                 const debit = cleanNumber(row[6]);
@@ -277,8 +263,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                     }
                 } else {
                     const dateStr = String(row[2]||"").trim();
-                    
-                    // ป้องกันการดึงบรรทัดที่มีแต่ยอดเงิน (เช่น บรรทัด 'รวม' ท้ายบัญชี) 
                     if (!dateStr || !dateStr.includes('/')) return; 
 
                     const { year, month } = parseDateToYearMonth(dateStr);
@@ -292,7 +276,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
         setAvailableYears(Array.from(yearsSet).sort((a,b)=>b-a));
     }, [csvDataRows]);
 
-    // 2. Calculation Effect (Runs whenever parsedTx is updated manually or year is changed)
     useEffect(() => {
         if (!parsedTx || parsedTx.length === 0) return;
         
@@ -401,7 +384,6 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
     };
 }, [financialData]);
 
-// Methods for Manual Edit
 const updateTransaction = (id, newFields) => {
     setParsedTx(prev => prev.map(t => t.id === id ? { ...t, ...newFields } : t));
 };
@@ -486,14 +468,17 @@ return (
 // --- Main Application ---
 const App = () => {
 const [activeTab, setActiveTab] = useState('import');
-const [statementView, setStatementView] = useState('tb'); // 'pnl', 'bs', 'tb'
+const [statementView, setStatementView] = useState('tb'); 
 const [isImporting, setIsImporting] = useState(false);
 const [rawCsvData, setRawCsvData] = useState(null);
 const [fileName, setFileName] = useState("");
 const [selectedYear, setSelectedYear] = useState("");
 const [searchVerify, setSearchVerify] = useState("");
 
-// Edit States for Verify Tab
+// --- New States for Intelligence Feature ---
+const [query, setQuery] = useState("");
+const [customChart, setCustomChart] = useState(null);
+
 const [editId, setEditId] = useState(null);
 const [editForm, setEditForm] = useState({});
 
@@ -510,6 +495,44 @@ useEffect(() => {
         setSelectedYear(availableYears[0].toString());
     }
 }, [availableYears]);
+
+// --- Intelligence Logic ---
+const handleSmartQuery = (e) => {
+    const val = e.target.value.toLowerCase();
+    setQuery(val);
+    if (!val) { setCustomChart(null); return; }
+
+    if (val.includes("vs") || val.includes("เทียบ") || val.includes("สินทรัพย์") || val.includes("หนี้สิน")) {
+        setCustomChart({
+            type: 'bar', title: 'Asset vs Liability Analysis',
+            data: MONTHS_SHORT.map((m, i) => ({ name: m, Asset: reportData.totalAssets[i] || 0, Liability: reportData.totalLiabilities[i] || 0 })),
+            keys: [{ k: 'Asset', c: '#1e3a8a' }, { k: 'Liability', c: '#ef4444' }]
+        });
+    } else if (val.includes("สะสม") || val.includes("profit") || val.includes("กำไร")) {
+        setCustomChart({
+            type: 'area', title: 'Accumulated Profit Trend',
+            data: MONTHS_SHORT.map((m, i) => ({ name: m, Value: reportData.netIncomeCumulative[i] || 0 })),
+            keys: [{ k: 'Value', c: '#10b981' }]
+        });
+    } else {
+        setCustomChart(null);
+    }
+};
+
+const healthData = useMemo(() => {
+    if (!importSuccess || !reportData) return [];
+    const lastIdx = 11;
+    const assets = reportData.totalAssets[lastIdx] || 0;
+    const liab = reportData.totalLiabilities[lastIdx] || 1; // prevent division by zero
+    
+    return [
+        { subject: 'Liquidity', A: Math.min((assets / liab) * 35, 100) }, 
+        { subject: 'Profitability', A: Math.min(reportData.netMargin * 3, 100) },
+        { subject: 'Growth', A: 75 },
+        { subject: 'Efficiency', A: 85 },
+        { subject: 'Solvency', A: Math.min((reportData.totalEquityReal[lastIdx] / assets) * 100 || 0, 100) }
+    ];
+}, [reportData, importSuccess]);
 
 const startEdit = (tx) => {
     setEditId(tx.id);
@@ -936,6 +959,44 @@ className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5
 
 {activeTab === 'dashboard' && importSuccess && (
 <div className="space-y-8 animate-in fade-in duration-500">
+
+{/* --- NEW: Intelligence Command --- */}
+<div className="bg-slate-900 p-6 rounded-2xl shadow-xl border border-slate-800 text-white relative overflow-hidden mb-8">
+    <div className="absolute top-0 right-0 p-8 opacity-10"><Icon name="PaperPlane" size={100} /></div>
+    <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
+        <div className="shrink-0 w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg"><Icon name="PaperPlane" size={20} /></div>
+        <div className="flex-1 w-full">
+            <h4 className="font-bold text-lg mb-1">Intelligence Insight</h4>
+            <input type="text" value={query} onChange={handleSmartQuery} placeholder="ลองพิมพ์สั่งงาน: 'asset vs liability' หรือ 'กำไรสะสม'..."
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-5 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-slate-500 transition-all" />
+        </div>
+    </div>
+</div>
+
+{/* --- NEW: Dynamic Custom Chart --- */}
+{customChart && (
+    <div className="bg-white p-8 rounded-2xl shadow-lg border-2 border-blue-500 mb-8 animate-fade-in">
+        <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2"><Icon name="CheckCircle2" className="text-blue-500"/> {customChart.title}</h3>
+        <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+                {customChart.type === 'bar' ? (
+                    <BarChart data={customChart.data}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" /> <YAxis tickFormatter={formatCompact} /> <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} /> <Legend />
+                        {customChart.keys.map(k => <Bar key={k.k} dataKey={k.k} name={k.k} fill={k.c} radius={[4, 4, 0, 0]} />)}
+                    </BarChart>
+                ) : (
+                    <AreaChart data={customChart.data}>
+                        <defs><linearGradient id="col" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.4}/><stop offset="95%" stopColor="#10b981" stopOpacity={0}/></linearGradient></defs>
+                        <XAxis dataKey="name" /> <YAxis tickFormatter={formatCompact} /> <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} />
+                        <Area type="monotone" dataKey="Value" name="Cumulative Profit" stroke="#10b981" fill="url(#col)" strokeWidth={3} />
+                    </AreaChart>
+                )}
+            </ResponsiveContainer>
+        </div>
+    </div>
+)}
+
 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
 <KPICard title="Revenue YTD" value={formatCompact(reportData.yearlyRev)} iconName="TrendingUp" trend="up" trendValue="12.5%" />
 <KPICard title="Expenses YTD" value={formatCompact(reportData.totalCombinedExp.reduce((a,b)=>a+b,0))} iconName="TrendingDown" />
@@ -944,41 +1005,84 @@ className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5
 </div>
 
 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-<div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-blue-100 shadow-sm">
-<p className="text-base font-bold text-blue-950 mb-6">Income vs Expense Trend</p>
-<div className="chart-container h-80 max-h-[400px]">
-<ResponsiveContainer width="100%" height="100%">
-<ComposedChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-<CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-<XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 500}} dy={10} />
-<YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 500}} tickFormatter={(v) => `${(v/1000)}k`} />
-<Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '13px', fontWeight: 'bold', color: '#1e3a8a'}} formatter={(v) => `฿${v.toLocaleString()}`} />
-<Bar dataKey="Revenue" fill="#1e3a8a" radius={[6, 6, 6, 6]} maxBarSize={30} />
-<Bar dataKey="Expenses" fill="#60a5fa" radius={[6, 6, 6, 6]} maxBarSize={30} />
-<Line type="monotone" dataKey="Profit" stroke="#eab308" strokeWidth={4} dot={{r: 5, fill: '#eab308', strokeWidth: 2, stroke: '#fff'}} />
-</ComposedChart>
-</ResponsiveContainer>
-</div>
+    <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-blue-100 shadow-sm">
+        <p className="text-base font-bold text-blue-950 mb-6">Income vs Expense Trend</p>
+        <div className="chart-container h-80 max-h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 500}} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12, fontWeight: 500}} tickFormatter={(v) => `${(v/1000)}k`} />
+                    <Tooltip contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', fontSize: '13px', fontWeight: 'bold', color: '#1e3a8a'}} formatter={(v) => `฿${v.toLocaleString()}`} />
+                    <Bar dataKey="Revenue" fill="#1e3a8a" radius={[6, 6, 6, 6]} maxBarSize={30} />
+                    <Bar dataKey="Expenses" fill="#60a5fa" radius={[6, 6, 6, 6]} maxBarSize={30} />
+                    <Line type="monotone" dataKey="Profit" stroke="#eab308" strokeWidth={4} dot={{r: 5, fill: '#eab308', strokeWidth: 2, stroke: '#fff'}} />
+                </ComposedChart>
+            </ResponsiveContainer>
+        </div>
+    </div>
+
+    <div className="bg-white p-8 rounded-2xl border border-blue-100 shadow-sm flex flex-col">
+        <p className="text-base font-bold text-blue-950 mb-4">Top Expenses</p>
+        <div className="chart-container flex-1 h-56 max-h-[300px]">
+            <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                    <Pie data={expensePieData} innerRadius={65} outerRadius={90} paddingAngle={3} dataKey="value">
+                        {expensePieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} contentStyle={{fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', fontWeight: 'bold'}} />
+                </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
+                <span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Total</span>
+                <span className="text-lg font-black text-blue-950">{formatCompact(reportData.totalOpex.reduce((a,b)=>a+b,0))}</span>
+            </div>
+        </div>
+    </div>
 </div>
 
-<div className="bg-white p-8 rounded-2xl border border-blue-100 shadow-sm flex flex-col">
-<p className="text-base font-bold text-blue-950 mb-4">Top Expenses</p>
-<div className="chart-container flex-1 h-56 max-h-[300px]">
-<ResponsiveContainer width="100%" height="100%">
-<PieChart>
-<Pie data={expensePieData} innerRadius={65} outerRadius={90} paddingAngle={3} dataKey="value">
-{expensePieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-</Pie>
-<Tooltip formatter={(v) => `฿${v.toLocaleString()}`} contentStyle={{fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', fontWeight: 'bold'}} />
-</PieChart>
-</ResponsiveContainer>
-<div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col">
-<span className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Total</span>
-<span className="text-lg font-black text-blue-950">{formatCompact(reportData.totalOpex.reduce((a,b)=>a+b,0))}</span>
+{/* --- NEW: Radar Chart & Auto Insight --- */}
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-4">
+    <div className="bg-white p-8 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-between">
+        <p className="font-bold text-blue-950 mb-4 text-base">Financial Health Radar</p>
+        <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="75%" data={healthData}>
+                    <PolarGrid stroke="#e2e8f0" />
+                    <PolarAngleAxis dataKey="subject" tick={{fontSize: 11, fontWeight: 600, fill: '#64748b'}} />
+                    <Radar name="Company" dataKey="A" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.5} />
+                    <Tooltip />
+                </RadarChart>
+            </ResponsiveContainer>
+        </div>
+    </div>
+    
+    <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-blue-100 shadow-sm flex flex-col justify-center">
+        <h3 className="text-xl font-bold text-blue-950 mb-4">AI Insight Analysis</h3>
+        <div className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex gap-4">
+                <Icon name="CheckCircle2" className="text-emerald-500 mt-1" size={20} />
+                <div>
+                    <h4 className="font-bold text-blue-900">อัตรากำไรสุทธิ (Net Margin)</h4>
+                    <p className="text-sm text-slate-600 mt-1">
+                        บริษัทมีอัตรากำไรสุทธิอยู่ที่ {reportData.netMargin.toFixed(2)}% {reportData.netMargin > 10 ? 'ซึ่งอยู่ในเกณฑ์ที่ดีมาก แสดงถึงการควบคุมต้นทุนที่มีประสิทธิภาพ' : 'อาจจะต้องพิจารณาลดค่าใช้จ่ายเพื่อให้ได้กำไรที่มากขึ้น'}
+                    </p>
+                </div>
+            </div>
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex gap-4">
+                <Icon name="ScaleBalanced" className="text-blue-500 mt-1" size={20} />
+                <div>
+                    <h4 className="font-bold text-blue-900">สภาพคล่อง (Assets vs Liabilities)</h4>
+                    <p className="text-sm text-slate-600 mt-1">
+                        สินทรัพย์รวมล่าสุด {formatCompact(reportData.totalAssets[11])} เทียบกับ หนี้สิน {formatCompact(reportData.totalLiabilities[11])} 
+                        {reportData.totalAssets[11] > reportData.totalLiabilities[11] ? ' โครงสร้างทุนมีความมั่นคง หนี้สินไม่เกินตัว' : ' มีความเสี่ยงด้านหนี้สิน ควรบริหารจัดการสภาพคล่องอย่างใกล้ชิด'}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
-</div>
-</div>
-</div>
+
 </div>
 )}
 
