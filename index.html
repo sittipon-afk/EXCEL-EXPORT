@@ -7,11 +7,14 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://unpkg.com/recharts@2.1.9/umd/Recharts.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+
 <style>
     body { font-family: 'Inter', sans-serif; background-color: #f4f7fb; }
     .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
@@ -98,7 +101,7 @@ const cleanNumber = (val) => {
     return parseFloat(val.toString().replace(/,/g, '')) || 0;
 };
 
-// --- 3. Accounting Engine (1000-line core) ---
+// --- 3. Accounting Engine ---
 const useFinancialEngine = (csvDataRows, selectedYear) => {
     const [availableYears, setAvailableYears] = useState([]);
     const [parsedTx, setParsedTx] = useState([]);
@@ -333,7 +336,7 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
 
 // --- 4. Sub Components ---
 const KPICard = ({ title, value, iconName, trend, trendValue, iconBgClass, iconColorClass }) => (
-    <div className="bg-white rounded-xl p-6 border-l-4 border-[#1e3a8a] shadow-sm flex flex-col justify-between h-36">
+    <div className="bg-white rounded-xl p-6 border-l-4 border-[#1e3a8a] shadow-sm flex flex-col justify-between h-36 hover:shadow-md transition-shadow">
         <div className="flex justify-between items-start">
             <div className={`${iconBgClass} ${iconColorClass} p-2 rounded-lg flex items-center justify-center w-10 h-10`}>
                 <Icon name={iconName} size={18} />
@@ -394,7 +397,7 @@ const StatementTotalRow = ({ label, values, viewType, isGrandTotal = false }) =>
     );
 };
 
-// --- 5. The Main App (Dashboard Assembly) ---
+// --- 5. The Main App ---
 const App = () => {
     const [activeTab, setActiveTab] = useState('import');
     const [statementView, setStatementView] = useState('tb'); 
@@ -406,16 +409,13 @@ const App = () => {
     const [query, setQuery] = useState("");
     const [customChart, setCustomChart] = useState(null);
     const [drillDownData, setDrillDownData] = useState({ open: false, title: '', rows: [] });
-
-    const [editId, setEditId] = useState(null);
-    const [editForm, setEditForm] = useState({});
     
     const [isSendingLine, setIsSendingLine] = useState(false);
     const [showNotification, setShowNotification] = useState(false);
     const [notificationMsg, setNotificationMsg] = useState("");
     const [notificationError, setNotificationError] = useState(false);
 
-    const { financialData, reportData, availableYears, parsedTx, updateTransaction, deleteTransaction } = useFinancialEngine(rawCsvData, selectedYear ? parseInt(selectedYear) : null);
+    const { financialData, reportData, availableYears, parsedTx, deleteTransaction } = useFinancialEngine(rawCsvData, selectedYear ? parseInt(selectedYear) : null);
     const importSuccess = rawCsvData !== null;
 
     useEffect(() => {
@@ -445,7 +445,7 @@ const App = () => {
         }
     };
 
-    // Budget vs Actual Data
+    // Analytics Data
     const analyticsData = useMemo(() => MONTHS_SHORT.map((m, i) => {
         const actualRev = reportData.totalRev[i] || 0;
         const budgetRev = actualRev === 0 ? 0 : actualRev * 1.1; 
@@ -453,7 +453,6 @@ const App = () => {
         return { name: m, ActualRev: actualRev, BudgetRev: budgetRev, ActualExp: actualExp, monthIdx: i };
     }), [reportData]);
 
-    // Health Radar Data
     const healthData = useMemo(() => {
         if (!importSuccess || !reportData) return [];
         const lastIdx = 11;
@@ -475,7 +474,7 @@ const App = () => {
         })).filter(e => e.value > 0).sort((a,b) => b.value - a.value).slice(0, 5);
     }, [financialData.opex]);
 
-    // Modal Click Handler
+    // Modal
     const handleChartClick = (data) => {
         if (!data || !data.activePayload) return;
         const payload = data.activePayload[0].payload;
@@ -526,7 +525,7 @@ const App = () => {
     const handleExportExcel = () => {
         if (typeof XLSX === 'undefined') return;
         const wb = XLSX.utils.book_new();
-        // ... (Export logic remains standard, removed for brevity in display, but you can paste your previous Export logic here)
+        // Export Logic Placeholder for simplicity
         XLSX.writeFile(wb, `Financial_Report_${selectedYear}.xlsx`);
     };
 
@@ -611,12 +610,6 @@ const App = () => {
                         )}
                         <button onClick={() => window.print()} className="p-2 text-slate-500 hover:text-[#0f172a] hover:bg-white transition-colors border border-slate-200 rounded-lg bg-white shadow-sm w-9 h-9 flex items-center justify-center" title="Print">
                             <Icon name="Printer" size={14} />
-                        </button>
-                        <button onClick={handleSendToLine} disabled={!importSuccess || isSendingLine} className="bg-[#00B900] text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md shadow-[#00B900]/20 hover:bg-[#009900] transition-colors disabled:opacity-50 flex items-center gap-2">
-                            {isSendingLine ? <Icon name="Loader2" className="fa-spin" /> : <Icon name="LineMsg" />} Send to Line
-                        </button>
-                        <button onClick={handleExportExcel} disabled={!importSuccess} className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md shadow-blue-700/20 hover:bg-blue-800 transition-colors disabled:opacity-50 flex items-center gap-2">
-                            <Icon name="FileSpreadsheet" /> Export Excel
                         </button>
                     </div>
                 </header>
