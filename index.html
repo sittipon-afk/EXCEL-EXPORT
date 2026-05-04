@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FinPulse - Financial Overview</title>
+<title>FinPulse - Deep-dive Analytics</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -13,11 +13,13 @@
 <script src="https://unpkg.com/recharts@2.1.9/umd/Recharts.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
-    body { font-family: 'Inter', sans-serif; background-color: #f4f7fb; }
+    body { font-family: 'Inter', sans-serif; background-color: #f4f7fb; overflow: hidden; }
     .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-    @media print { .no-print { display: none !important; } }
-    .chart-container { position: relative; width: 100%; height: 100%; }
+    .modal-overlay { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
 </style>
 </head>
 <body class="text-slate-800">
@@ -25,243 +27,269 @@
 
 <script type="text/babel">
 const { useState, useMemo, useEffect } = React;
-const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, ComposedChart } = window.Recharts;
+const { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell, PieChart, Pie } = window.Recharts;
 
-// --- Icon Component ---
+// --- Components ---
 const Icon = ({ name, size = 16, className = "" }) => {
     const faMap = {
-        Upload: 'fa-solid fa-upload', FileText: 'fa-solid fa-file-lines', BarChart3: 'fa-solid fa-chart-column',
-        TrendingUp: 'fa-solid fa-arrow-trend-up', TrendingDown: 'fa-solid fa-arrow-trend-down',
-        Loader2: 'fa-solid fa-circle-notch fa-spin', Printer: 'fa-solid fa-print', Layers: 'fa-solid fa-layer-group',
-        CheckCircle2: 'fa-solid fa-circle-check', PieChartIcon: 'fa-solid fa-chart-pie', DollarSign: 'fa-solid fa-dollar-sign',
-        ListCheck: 'fa-solid fa-list-check', Pen: 'fa-solid fa-pen', Trash: 'fa-solid fa-trash'
+        Upload: 'fa-upload', FileText: 'fa-file-lines', BarChart3: 'fa-chart-column',
+        TrendingUp: 'fa-arrow-trend-up', TrendingDown: 'fa-arrow-trend-down',
+        Loader2: 'fa-circle-notch fa-spin', Printer: 'fa-print', Layers: 'fa-layer-group',
+        CheckCircle2: 'fa-circle-check', PieChartIcon: 'fa-chart-pie', DollarSign: 'fa-dollar-sign',
+        ListCheck: 'fa-list-check', Xmark: 'fa-xmark', Target: 'fa-bullseye'
     };
-    return <i className={`${faMap[name] || 'fa-solid fa-circle'} ${className}`} style={{ fontSize: size }}></i>;
+    return <i className={`fa-solid ${faMap[name] || 'fa-circle'} ${className}`} style={{ fontSize: size }}></i>;
 };
 
 const MONTHS_SHORT = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-const COLORS = ['#1e3a8a', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd'];
-
-// --- Formatting Utils ---
-const formatCurrency = (val) => {
-    if (!val || isNaN(val)) return '-';
-    if (Math.abs(val) < 0.01) return '-';
-    return Math.abs(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-};
 
 const formatCompact = (val) => {
-    if (!val || isNaN(val)) return '0';
+    if (!val) return '0';
     if (Math.abs(val) >= 1000000) return `฿ ${(val / 1000000).toFixed(2)}M`;
-    if (Math.abs(val) >= 1000) return `฿ ${(val / 1000).toFixed(2)}k`;
-    return `฿ ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (Math.abs(val) >= 1000) return `฿ ${(val / 1000).toFixed(0)}k`;
+    return `฿ ${val.toLocaleString()}`;
 };
 
-// --- Mock Data Engine (แทนที่ด้วยระบบ Import จริงของคุณได้) ---
-const useFinancialEngine = () => {
-    // ใส่ Mock Data เพื่อให้แสดงผลเหมือนในภาพ
-    const reportData = {
-        yearlyRev: 5590000,
-        totalCombinedExp: [1190000],
-        yearlyNet: 4400000,
-        netMargin: 78.7,
-        totalRev: [1400000, 1420000, 1350000, 1550000, 0, 0, 0, 0, 0, 0, 0, 0],
-        totalExp: [450000, 430000, 300000, 10000, 0, 0, 0, 0, 0, 0, 0, 0],
-        netIncomeMonthly: [950000, 990000, 1050000, 1540000, 0, 0, 0, 0, 0, 0, 0, 0]
-    };
-    
-    const expensePieData = [
-        { name: 'Cost of Sales', value: 650000 },
-        { name: 'Marketing', value: 250000 },
-        { name: 'Payroll', value: 150000 },
-        { name: 'Rent', value: 100000 },
-        { name: 'Utilities', value: 40000 }
-    ];
-
-    return { importSuccess: true, reportData, expensePieData };
+// --- Mock Transaction Data for Drill-down ---
+const generateMockTransactions = (month, category) => {
+    return Array.from({ length: 5 }, (_, i) => ({
+        id: `TX-${month}-${i}`,
+        date: `2026-${month + 1}-${10 + i}`,
+        desc: `${category} Transaction Item ${i + 1}`,
+        amount: (Math.random() * 50000) + 10000
+    }));
 };
 
-// --- Custom UI Components ---
-const KPICard = ({ title, value, iconName, trend, trendValue, iconColorClass, iconBgClass }) => (
-    <div className="bg-white rounded-xl p-6 border-l-4 border-[#1e3a8a] shadow-sm flex flex-col justify-between h-36">
-        <div className="flex justify-between items-start">
-            <div className={`${iconBgClass} ${iconColorClass} p-2 rounded-lg flex items-center justify-center w-10 h-10`}>
-                <Icon name={iconName} size={18} />
-            </div>
-            {trend && (
-                <span className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md ${trend === 'up' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                    {trend === 'up' ? <Icon name="TrendingUp" size={10} /> : <Icon name="TrendingDown" size={10} />}
-                    {trendValue}
-                </span>
-            )}
-        </div>
-        <div className="mt-4">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</p>
-            <h3 className="text-3xl font-black text-[#0f172a] tracking-tight">{value}</h3>
-        </div>
-    </div>
-);
-
-// --- Main Application ---
 const App = () => {
     const [activeTab, setActiveTab] = useState('dashboard');
-    const { importSuccess, reportData, expensePieData } = useFinancialEngine();
-    
-    const chartData = useMemo(() => {
-        return MONTHS_SHORT.map((m, i) => ({
+    const [selectedMonth, setSelectedMonth] = useState(null);
+    const [drillDownData, setDrillDownData] = useState({ open: false, title: '', rows: [] });
+
+    // Mock Budget vs Actual Data
+    const analyticsData = useMemo(() => MONTHS_SHORT.map((m, i) => {
+        const actualRev = [1.2M, 1.4M, 1.1M, 1.5M, 0, 0, 0, 0, 0, 0, 0, 0][i] || 0;
+        const budgetRev = 1.35; // Target 1.35M per month
+        const actualExp = [0.4M, 0.35M, 0.5M, 0.2M, 0, 0, 0, 0, 0, 0, 0, 0][i] || 0;
+        const budgetExp = 0.45;
+
+        return {
             name: m,
-            Revenue: reportData.totalRev[i],
-            Expenses: reportData.totalExp[i],
-            Profit: reportData.netIncomeMonthly[i],
-        }));
-    }, [reportData]);
+            ActualRev: actualRev * 1000000,
+            BudgetRev: budgetRev * 1000000,
+            ActualExp: actualExp * 1000000,
+            BudgetExp: budgetExp * 1000000,
+            monthIdx: i
+        };
+    }), []);
+
+    const handleChartClick = (data) => {
+        if (!data || !data.activePayload) return;
+        const payload = data.activePayload[0].payload;
+        const monthName = payload.name;
+        const category = "Revenue"; // Default for demo
+        
+        setDrillDownData({
+            open: true,
+            title: `Drill-down: ${category} - ${monthName}`,
+            rows: generateMockTransactions(payload.monthIdx, category)
+        });
+    };
 
     return (
-        <div className="flex h-screen overflow-hidden bg-[#f4f7fb]">
-            {/* --- Sidebar --- */}
-            <aside className="w-64 bg-[#1e2235] flex flex-col z-50 shadow-xl no-print shrink-0">
+        <div className="flex h-screen bg-[#f4f7fb]">
+            {/* Sidebar (Same as original image) */}
+            <aside className="w-64 bg-[#1e2235] flex flex-col z-50 shadow-xl shrink-0">
                 <div className="h-20 flex items-center px-6 border-b border-slate-700/50">
-                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white mr-3">
+                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center text-white mr-3 shadow-lg">
                         <Icon name="Layers" size={16} />
                     </div>
                     <h1 className="text-xl font-bold tracking-tight text-white">Fin<span className="text-blue-400">Pulse</span></h1>
                 </div>
-                
-                <div className="flex-1 py-6 px-4 flex flex-col gap-2">
-                    <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Finance Engine</p>
-                    {[
-                        { id: 'import', iconName: 'Upload', label: 'Data Import' },
-                        { id: 'verify', iconName: 'ListCheck', label: 'Data Re-check' },
-                        { id: 'dashboard', iconName: 'BarChart3', label: 'Performance Analytics' },
-                        { id: 'statements', iconName: 'FileText', label: 'Ledger Statements' },
-                    ].map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => setActiveTab(item.id)}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-semibold ${
-                                activeTab === item.id
-                                ? 'bg-[#2563eb] text-white shadow-md'
-                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-                            }`}
-                        >
-                            <Icon name={item.iconName} size={16} className={activeTab === item.id ? 'text-white' : 'text-slate-400'} />
-                            <span>{item.label}</span>
-                        </button>
-                    ))}
+                <div className="flex-1 py-6 px-4 space-y-2">
+                    <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Finance Engine</p>
+                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-all text-sm font-semibold">
+                        <Icon name="Upload" /> <span>Data Import</span>
+                    </button>
+                    <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-sm font-semibold ${activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>
+                        <Icon name="BarChart3" /> <span>Performance Analytics</span>
+                    </button>
+                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-all text-sm font-semibold">
+                        <Icon name="FileText" /> <span>Ledger Statements</span>
+                    </button>
                 </div>
-                
-                {/* User Profile Area (Bottom) */}
                 <div className="p-6 border-t border-slate-700/50">
                     <div className="flex items-center gap-3">
                         <div className="w-9 h-9 bg-blue-800 rounded-full flex items-center justify-center text-xs font-bold text-white">AM</div>
-                        <div>
-                            <p className="text-sm font-bold text-white">Amper Co., Ltd.</p>
-                            <p className="text-xs text-slate-400">Active Workspace</p>
+                        <div className="text-white">
+                            <p className="text-sm font-bold">Amper Co., Ltd.</p>
+                            <p className="text-[10px] text-slate-400 uppercase">Pro Workspace</p>
                         </div>
                     </div>
                 </div>
             </aside>
 
-            {/* --- Main Content --- */}
-            <main className="flex-1 flex flex-col h-full overflow-hidden">
-                {/* Header */}
-                <header className="h-20 flex items-center justify-between px-8 bg-[#f4f7fb] no-print shrink-0">
+            {/* Main Content */}
+            <main className="flex-1 flex flex-col overflow-hidden">
+                <header className="h-20 flex items-center justify-between px-8 bg-[#f4f7fb] shrink-0">
                     <div className="flex items-center gap-4">
-                        <h2 className="font-bold text-xl text-[#0f172a] tracking-tight">Financial Overview</h2>
-                        <div className="flex items-center bg-blue-50 border border-blue-100 rounded-full overflow-hidden h-8">
-                            <span className="px-3 py-1 text-xs font-bold text-blue-600 bg-blue-100/50 border-r border-blue-100">FY</span>
-                            <select className="bg-transparent text-blue-700 px-3 py-1 text-sm font-bold focus:outline-none cursor-pointer">
-                                <option>2026</option>
-                            </select>
+                        <h2 className="font-bold text-xl text-slate-800 tracking-tight">Performance Analytics</h2>
+                        <div className="flex items-center bg-white border border-slate-200 rounded-full h-8 px-1 shadow-sm">
+                            <span className="px-2 text-[10px] font-bold text-blue-600">FY 2026</span>
                         </div>
                     </div>
-                    
-                    <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1.5 px-3 py-2 text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg text-xs font-bold">
-                            <Icon name="CheckCircle2" size={14} /> Data Synced
+                    <div className="flex items-center gap-2">
+                        <span className="px-3 py-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-lg">
+                            <Icon name="CheckCircle2" size={12} className="mr-1"/> Data Synced
                         </span>
-                        <button onClick={() => window.print()} className="p-2 text-slate-500 hover:text-[#0f172a] hover:bg-white transition-colors border border-slate-200 rounded-lg bg-white shadow-sm flex items-center justify-center w-9 h-9" title="Print">
+                        <button className="p-2 text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-lg shadow-sm">
                             <Icon name="Printer" size={14} />
                         </button>
-                        {/* 🚫 ซ่อนปุ่ม Line และ Export ไว้ตามคำสั่ง */}
-                        {/* <button className="bg-[#00B900] text-white px-4 py-2 rounded-lg text-sm font-bold... ">...</button> */}
-                        {/* <button className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold... ">...</button> */}
                     </div>
                 </header>
 
-                {/* Content Scrollable Area */}
                 <div className="flex-1 overflow-y-auto p-8 pt-2 custom-scrollbar">
-                    {activeTab === 'dashboard' && importSuccess && (
-                        <div className="max-w-7xl mx-auto space-y-6">
-                            
-                            {/* KPI Cards Row */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                <KPICard 
-                                    title="REVENUE YTD" value={formatCompact(reportData.yearlyRev)} 
-                                    iconName="TrendingUp" trend="up" trendValue="+ 12.5%" 
-                                    iconBgClass="bg-blue-50" iconColorClass="text-blue-600"
-                                />
-                                <KPICard 
-                                    title="EXPENSES YTD" value={formatCompact(reportData.totalCombinedExp[0])} 
-                                    iconName="TrendingDown" 
-                                    iconBgClass="bg-blue-50" iconColorClass="text-blue-600"
-                                />
-                                <KPICard 
-                                    title="NET INCOME" value={formatCompact(reportData.yearlyNet)} 
-                                    iconName="DollarSign" trend="up" trendValue="+ 8.4%" 
-                                    iconBgClass="bg-blue-50" iconColorClass="text-blue-600"
-                                />
-                                <KPICard 
-                                    title="NET MARGIN" value={`${reportData.netMargin}%`} 
-                                    iconName="PieChartIcon" 
-                                    iconBgClass="bg-blue-50" iconColorClass="text-blue-600"
-                                />
-                            </div>
-
-                            {/* Charts Row */}
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                {/* Bar & Line Chart */}
-                                <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex flex-col h-[420px]">
-                                    <p className="text-sm font-bold text-[#0f172a] mb-6">Income vs Expense Trend</p>
-                                    <div className="flex-1 w-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <ComposedChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 600}} dy={10} />
-                                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11, fontWeight: 600}} tickFormatter={(v) => v === 0 ? '0k' : `${(v/1000)}k`} />
-                                                <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', fontSize: '12px', fontWeight: 'bold'}} formatter={(v) => `฿${v.toLocaleString()}`} />
-                                                <Bar dataKey="Revenue" fill="#1e3a8a" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                                                <Bar dataKey="Expenses" fill="#60a5fa" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                                                <Line type="monotone" dataKey="Profit" stroke="#eab308" strokeWidth={3} dot={{r: 4, fill: '#eab308', strokeWidth: 2, stroke: '#fff'}} />
-                                            </ComposedChart>
-                                        </ResponsiveContainer>
-                                    </div>
+                    <div className="max-w-7xl mx-auto space-y-6">
+                        
+                        {/* KPI Row (Budget Comparison Style) */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div className="bg-white p-6 rounded-xl border-l-4 border-blue-600 shadow-sm flex flex-col justify-between h-32">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Revenue vs Budget</span>
+                                    <span className="text-[10px] font-bold text-emerald-500">+12%</span>
                                 </div>
-
-                                {/* Donut Chart */}
-                                <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex flex-col h-[420px]">
-                                    <p className="text-sm font-bold text-[#0f172a] mb-2">Top Expenses</p>
-                                    <div className="flex-1 relative w-full h-full">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <PieChart>
-                                                <Pie data={expensePieData} innerRadius="65%" outerRadius="85%" paddingAngle={2} dataKey="value" stroke="none">
-                                                    {expensePieData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                                                </Pie>
-                                                <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} contentStyle={{fontSize: '12px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', fontWeight: 'bold'}} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                        {/* Center Text */}
-                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none flex-col mt-2">
-                                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">TOTAL</span>
-                                            <span className="text-lg font-black text-[#0f172a]">{formatCompact(reportData.totalCombinedExp[0])}</span>
-                                        </div>
-                                    </div>
+                                <h3 className="text-2xl font-black text-slate-800 tracking-tight">฿ 5.20M</h3>
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2">
+                                    <div className="bg-blue-600 h-1.5 rounded-full" style={{width: '85%'}}></div>
                                 </div>
                             </div>
-                            
+                            <div className="bg-white p-6 rounded-xl border-l-4 border-orange-500 shadow-sm flex flex-col justify-between h-32">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">OPEX Actual</span>
+                                    <span className="text-[10px] font-bold text-rose-500">+5%</span>
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-800 tracking-tight">฿ 1.45M</h3>
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2">
+                                    <div className="bg-orange-500 h-1.5 rounded-full" style={{width: '92%'}}></div>
+                                </div>
+                            </div>
+                            <div className="bg-white p-6 rounded-xl border-l-4 border-emerald-500 shadow-sm flex flex-col justify-between h-32">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Net Profit</span>
+                                <h3 className="text-2xl font-black text-emerald-600 tracking-tight">฿ 3.75M</h3>
+                                <p className="text-[10px] text-slate-400">Target: ฿ 3.50M</p>
+                            </div>
+                            <div className="bg-white p-6 rounded-xl border-l-4 border-slate-800 shadow-sm flex flex-col justify-between h-32">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Burn Rate</span>
+                                <h3 className="text-2xl font-black text-slate-800 tracking-tight">฿ 450k/mo</h3>
+                                <p className="text-[10px] text-slate-400 text-emerald-500">Stable</p>
+                            </div>
                         </div>
-                    )}
+
+                        {/* Main Deep-dive Chart */}
+                        <div className="bg-white p-8 rounded-xl border border-slate-100 shadow-sm h-[500px] flex flex-col relative">
+                            <div className="flex justify-between items-start mb-8">
+                                <div>
+                                    <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                                        <Icon name="Target" className="text-blue-600" /> 
+                                        Budget vs. Actual Drill-down
+                                    </h4>
+                                    <p className="text-xs text-slate-400 mt-1 italic">กดที่แท่งสีน้ำเงิน (Actual) เพื่อดูรายละเอียด Transaction</p>
+                                </div>
+                                <div className="flex gap-4 text-xs font-bold">
+                                    <div className="flex items-center gap-2"><span className="w-3 h-3 bg-blue-600 rounded"></span> Actual</div>
+                                    <div className="flex items-center gap-2"><span className="w-3 h-3 bg-slate-200 rounded"></span> Budget</div>
+                                </div>
+                            </div>
+                            <div className="flex-1 w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={analyticsData} onClick={handleChartClick} margin={{top: 0, right: 0, left: -20, bottom: 0}}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} dy={10} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 11}} tickFormatter={(v) => `${v/1000000}M`} />
+                                        <Tooltip 
+                                            cursor={{fill: '#f8fafc'}}
+                                            contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}}
+                                            formatter={(v) => formatCompact(v)}
+                                        />
+                                        <Bar dataKey="BudgetRev" fill="#e2e8f0" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                                        <Bar dataKey="ActualRev" fill="#2563eb" radius={[4, 4, 0, 0]} maxBarSize={30} className="cursor-pointer hover:opacity-80" />
+                                        <Line type="monotone" dataKey="ActualExp" stroke="#f97316" strokeWidth={3} dot={{r: 4, fill: '#f97316'}} />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* Secondary Analytics Row */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10">
+                            <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm h-80">
+                                <p className="text-sm font-bold text-slate-800 mb-6 uppercase tracking-wider">Variance Analysis (%)</p>
+                                <div className="space-y-4 overflow-y-auto h-56 custom-scrollbar pr-2">
+                                    {['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.'].map((m, i) => (
+                                        <div key={m} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                            <span className="font-bold text-sm text-slate-600">{m}</span>
+                                            <div className="flex-1 mx-6 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                                <div className={`h-full ${i === 2 ? 'bg-rose-400' : 'bg-emerald-400'}`} style={{width: `${70 + (i*5)}%`}}></div>
+                                            </div>
+                                            <span className={`text-xs font-bold ${i === 2 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                {i === 2 ? '-18.2%' : `+${(Math.random() * 15).toFixed(1)}%`}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="bg-[#1e2235] p-8 rounded-xl shadow-lg h-80 text-white relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-10 opacity-10">
+                                    <Icon name="Target" size={150} />
+                                </div>
+                                <h4 className="text-lg font-bold mb-2">Deep Insight</h4>
+                                <p className="text-slate-400 text-sm leading-relaxed mb-6">
+                                    ในไตรมาสที่ 1 ยอด Revenue สูงกว่าเป้าหมายเฉลี่ย 8% แต่เริ่มเห็นสัญญาณของค่าใช้จ่ายการตลาด (Marketing) ที่เพิ่มขึ้นในเดือน มี.ค. เกินงบที่ตั้งไว้ ฿ 50,000
+                                </p>
+                                <button className="bg-blue-600 text-white px-5 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all">
+                                    เรียกดูรายงานความเสี่ยง
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </main>
+
+            {/* --- Drill-down Modal --- */}
+            {drillDownData.open && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center modal-overlay p-4">
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden animate-slide-up">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="font-black text-slate-800 text-lg uppercase tracking-tight">{drillDownData.title}</h3>
+                            <button onClick={() => setDrillDownData({...drillDownData, open: false})} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-200 text-slate-500 transition-all">
+                                <Icon name="Xmark" size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <table className="w-full text-left text-sm border-collapse">
+                                <thead>
+                                    <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                                        <th className="pb-3 px-2">Date</th>
+                                        <th className="pb-3 px-2">Description</th>
+                                        <th className="pb-3 px-2 text-right">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {drillDownData.rows.map((row) => (
+                                        <tr key={row.id} className="hover:bg-blue-50 transition-colors">
+                                            <td className="py-4 px-2 font-mono text-xs text-slate-500">{row.date}</td>
+                                            <td className="py-4 px-2 font-semibold text-slate-700">{row.desc}</td>
+                                            <td className="py-4 px-2 text-right font-black text-blue-600">฿ {row.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <div className="mt-6 flex justify-between items-center p-4 bg-blue-50 rounded-xl border border-blue-100">
+                                <span className="text-xs font-bold text-blue-800 uppercase">Total Items Contribution</span>
+                                <span className="text-lg font-black text-blue-900 tracking-tighter">฿ {drillDownData.rows.reduce((sum, r) => sum + r.amount, 0).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
