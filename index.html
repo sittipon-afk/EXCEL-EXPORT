@@ -162,92 +162,61 @@ const useFinancialEngine = (csvDataRows, selectedYear) => {
                 }
             });
         } else {
-            let headerRowIdx = -1;
-            let colMap = {};
-            for(let i=0; i<Math.min(20, csvDataRows.length); i++) {
-                const row = csvDataRows[i];
-                if(!row) continue;
-                const rowStr = row.map(c => String(c||'').toLowerCase()).join('|');
-                if((rowStr.includes('รหัสบัญชี') || rowStr.includes('account code')) && (rowStr.includes('เดบิต') || rowStr.includes('debit'))) {
-                    headerRowIdx = i;
-                    row.forEach((col, idx) => {
-                        const c = String(col||'').toLowerCase();
-                        if(c.includes('รหัสบัญชี') || c.includes('account code')) colMap.code = idx;
-                        else if(c.includes('ชื่อบัญชี') || c.includes('account name')) colMap.name = idx;
-                        else if(c === 'วันที่' || c === 'date') colMap.date = idx;
-                        else if(c === 'เดบิต' || c === 'debit' || c.includes('debit')) colMap.debit = idx;
-                        else if(c === 'เครดิต' || c === 'credit' || c.includes('credit')) colMap.credit = idx;
-                    });
-                    break;
+            // --- SMART PARSER (PEAK / FlowAccount / Standard) ---
+            setParserType("PEAK / Smart Parser");
+            let curCode = "";
+            let curName = "";
+            let seenAccountsStandard = new Set();
+
+            csvDataRows.forEach(row => {
+                if (!row || row.length === 0) return;
+                const col0 = (row[0] || "").toString().trim();
+                
+                // ตรวจจับบัญชี PEAK (เช่น "111101 (เงินสด)" หรือ "111101 - CSH002 (เงินสด)")
+                if (/^\d{4,}/.test(col0) && !col0.includes('/')) {
+                    let parts = col0.split(/[- (]/);
+                    curCode = parts[0].trim();
+                    curName = col0.substring(curCode.length).replace(/^[- (]+/, '').replace(/\)$/, '').trim();
+                    return; // เป็นบรรทัดหัวบัญชี ให้ข้ามไปเลย
                 }
-            }
 
-            if (headerRowIdx !== -1 && colMap.code !== undefined && colMap.debit !== undefined) {
-                setParserType("Smart Universal Parser");
-                let seenAccountsSmart = new Set();
-                for(let i = headerRowIdx + 1; i < csvDataRows.length; i++) {
-                    const row = csvDataRows[i];
-                    if (!row || row.length === 0) continue;
-                    let curCode = String(row[colMap.code] || "").trim();
-                    if (!curCode) continue;
-
-                    let curName = colMap.name !== undefined ? String(row[colMap.name] || "").trim() : "";
-                    let dateStr = colMap.date !== undefined ? String(row[colMap.date] || "").trim() : "";
-                    let desc = String(row[5] || "").trim(); 
-                    let debit = cleanNumber(row[colMap.debit]);
-                    let credit = cleanNumber(row[colMap.credit]);
-                    const rowString = row.join("|");
-                    const rowStrLower = rowString.toLowerCase();
-                    
-                    if (closingKeywords.some(kw => rowStrLower.includes(kw))) continue; 
-                    let isOpening = rowString.includes("ยอดยกมา");
-
-                    if (isOpening || (!dateStr && isOpening)) {
-                        if (!seenAccountsSmart.has(curCode)) {
-                            seenAccountsSmart.add(curCode);
-                            flatTransactions.push({ id: generateId(), date: 'ยอดยกมา', code: curCode, name: curName, desc: desc || 'ยอดยกมา', year: -1, month: -1, isOpening: true, rawDebit: debit, rawCredit: credit });
-                        }
-                    } else if (dateStr && dateStr.includes('/')) {
-                        const { year, month } = parseDateToYearMonth(dateStr);
-                        if (year !== -1) yearsSet.add(year);
-                        flatTransactions.push({ id: generateId(), date: dateStr, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: debit, rawCredit: credit });
-                    }
+                if (!curCode) return;
+                
+                const rowString = row.join("|");
+                const rowStrLower = rowString.toLowerCase();
+                const desc = String(row[5] || "").trim();
+                
+                // กรองบรรทัดขยะทิ้งให้หมด
+                if (
+                    closingKeywords.some(kw => rowStrLower.includes(kw)) || 
+                    rowString.includes("ลำดับที่") || 
+                    row.some(c => String(c).trim() === 'รวม' || String(c).trim() === 'ยอดยกไป' || String(c).trim() === 'Total') ||
+                    rowStrLower.includes("ชื่อรายงาน") ||
+                    rowStrLower.includes("ผู้ออกรายงาน") ||
+                    rowStrLower.includes("วันที่ออกรายงาน")
+                ) {
+                    return;
                 }
-            } else {
-                setParserType("Standard Parser");
-                let curCode = "";
-                let curName = "";
-                let seenAccountsStandard = new Set();
 
-                csvDataRows.forEach(row => {
-                    if (!row || row.length === 0) return;
-                    const col0 = (row[0] || "").toString().trim();
-                    const accountMatch = col0.match(/^(\d+)\s*\((.*)\)/);
-                    if (accountMatch) { curCode = accountMatch[1]; curName = accountMatch[2]; }
-                    if (!curCode) return;
-                    
-                    const rowString = row.join("|");
-                    const rowStrLower = rowString.toLowerCase();
-                    const desc = String(row[5] || "").trim();
-                    
-                    if (closingKeywords.some(kw => rowStrLower.includes(kw)) || rowString.includes("ลำดับที่")) return;
-                    const debit = cleanNumber(row[6]);
-                    const credit = cleanNumber(row[7]);
+                const debit = cleanNumber(row[6]);
+                const credit = cleanNumber(row[7]);
 
-                    if (rowString.includes("ยอดยกมา")) {
-                        if (!seenAccountsStandard.has(curCode)) {
-                            seenAccountsStandard.add(curCode);
-                            flatTransactions.push({ id: generateId(), date: 'ยอดยกมา', code: curCode, name: curName, desc: desc || 'ยอดยกมา', year: -1, month: -1, isOpening: true, rawDebit: debit, rawCredit: credit });
-                        }
-                    } else {
-                        const dateStr = String(row[2]||"").trim();
-                        if (!dateStr || !dateStr.includes('/')) return; 
-                        const { year, month } = parseDateToYearMonth(dateStr);
-                        if (year !== -1) yearsSet.add(year);
-                        flatTransactions.push({ id: generateId(), date: dateStr, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: debit, rawCredit: credit });
+                if (rowString.includes("ยอดยกมา") || desc.includes("ยอดยกมา")) {
+                    if (!seenAccountsStandard.has(curCode)) {
+                        seenAccountsStandard.add(curCode);
+                        flatTransactions.push({ id: generateId(), date: 'ยอดยกมา', code: curCode, name: curName, desc: desc || 'ยอดยกมา', year: -1, month: -1, isOpening: true, rawDebit: debit, rawCredit: credit });
                     }
-                });
-            }
+                } else {
+                    const dateStr = String(row[2]||"").trim();
+                    
+                    // ป้องกันบรรทัดที่ไม่มีวันที่ (บรรทัดขยะที่หลุดรอด)
+                    if (!dateStr || !dateStr.match(/[\/-]/)) return; 
+
+                    const { year, month } = parseDateToYearMonth(dateStr);
+                    if (year !== -1) yearsSet.add(year);
+                    flatTransactions.push({ id: generateId(), date: dateStr, code: curCode, name: curName, desc: desc, year, month, isOpening: false, rawDebit: debit, rawCredit: credit });
+                }
+            });
         }
         setParsedTx(flatTransactions);
         setAvailableYears(Array.from(yearsSet).sort((a,b)=>b-a));
@@ -595,7 +564,7 @@ reader.onload = (evt) => {
 
         setTimeout(() => {
             setIsImporting(false);
-            setActiveTab('dashboard'); 
+            setActiveTab('verify'); 
             setStatementView('tb');
         }, 500);
     } catch (err) {
@@ -649,7 +618,6 @@ const drilldownChartData = useMemo(() => {
     return MONTHS_SHORT.map((m, i) => {
         let obj = { name: m };
         financialData[drilldownCategory].forEach(acc => {
-            // For BS, stack chart isn't great for cumulative flow over months in the same way, but it shows month-end balance.
             obj[acc.name] = acc.monthly[i] || 0;
         });
         return obj;
